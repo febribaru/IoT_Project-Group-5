@@ -1,0 +1,11 @@
+[target.xtensa-esp32s3-none-elf]
+runner = "espflash flash --partition-table partitions.csv --monitor"
+
+[build]
+rustflags = [
+    "-C", "link-arg=-Tlinkall.x",
+]
+target = "xtensa-esp32s3-none-elf"
+
+[unstable]
+build-std = ["core", "alloc"]

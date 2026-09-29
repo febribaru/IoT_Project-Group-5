@@ -1,0 +1,26 @@
+# Rust / Cargo build artifacts
+target/
+**/target/
+*.exe
+*.pdb
+*.bin
+
+# Environment variables & secrets (DO NOT COMMIT SECRETS)
+.env
+*.env
+!*.env.example
+
+# Python cache
+__pycache__/
+**/__pycache__/
+*.pyc
+
+# Temporary reports / local notes
+LAPORAN SEMENTARA/
+
+# OS & Editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp

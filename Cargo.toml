@@ -1,0 +1,8 @@
+[workspace]
+members = [
+    "backend"
+]
+exclude = [
+    "esp32"
+]
+resolver = "2"

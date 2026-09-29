@@ -1,0 +1,2023 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Electronic Nose | Robusta Coffee Aroma Profiling & Quality Analyzer</title>
+
+  <!-- Google Fonts: Space Grotesk (Headers/Metrics), Inter (Body), JetBrains Mono (Receipt/Telemetry) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- External Libraries (Chart.js, jsPDF, html2canvas via jsDelivr CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+
+  <link rel="stylesheet" href="style.css?v=3.3" />
+  <style>
+    /* Dynamic TinyML Classes & Adaptive Learning Styles */
+    .tinyml-dynamic-classes-container {
+      margin-top: 14px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 12px;
+      min-height: 80px;
+    }
+    .tinyml-empty-state {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px dashed rgba(255, 255, 255, 0.15);
+      border-radius: 10px;
+      padding: 16px 20px;
+    }
+    .empty-state-icon {
+      font-size: 1.8rem;
+    }
+    .empty-state-text strong {
+      display: block;
+      color: #38bdf8;
+      font-size: 0.85rem;
+      margin-bottom: 4px;
+    }
+    .empty-state-text p {
+      margin: 0;
+      color: #94a3b8;
+      font-size: 0.74rem;
+      line-height: 1.4;
+    }
+    .tinyml-class-col {
+      background: rgba(15, 23, 42, 0.7) !important;
+      border: 1px solid rgba(255, 255, 255, 0.1) !important;
+      border-radius: 10px !important;
+      padding: 12px 14px !important;
+      display: flex !important;
+      flex-direction: column !important;
+      gap: 8px !important;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+      transition: all 0.25s ease;
+    }
+    .tinyml-class-col.is-predicted {
+      border-color: #00f5d4 !important;
+      box-shadow: 0 0 16px rgba(0, 245, 212, 0.3) !important;
+      background: rgba(15, 30, 48, 0.85) !important;
+    }
+    .tinyml-class-header {
+      display: flex !important;
+      justify-content: space-between !important;
+      align-items: center !important;
+    }
+    .tinyml-class-name {
+      font-size: 0.8rem !important;
+      font-weight: 700 !important;
+      color: #e2e8f0 !important;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .tinyml-class-meta {
+      font-size: 0.68rem;
+      color: #64748b;
+      font-family: var(--font-mono, monospace);
+    }
+    .tinyml-class-val {
+      font-size: 0.9rem !important;
+      font-weight: 700 !important;
+      font-family: var(--font-mono, monospace) !important;
+    }
+    .tinyml-prog-track {
+      width: 100% !important;
+      height: 8px !important;
+      background: rgba(255, 255, 255, 0.12) !important;
+      border-radius: 6px !important;
+      overflow: hidden !important;
+    }
+    .tinyml-prog-bar {
+      height: 100% !important;
+      transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1) !important;
+      border-radius: 6px !important;
+      background: linear-gradient(90deg, #00f5d4, #10b981) !important;
+      box-shadow: 0 0 10px rgba(0, 245, 212, 0.5);
+    }
+
+    /* Sample Bank Toolbar */
+    .sample-bank-toolbar {
+      margin-top: 14px;
+      padding: 10px 14px;
+      background: rgba(15, 23, 42, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .sample-bank-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .bank-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #00f5d4;
+      box-shadow: 0 0 8px #00f5d4;
+    }
+    .bank-summary-text {
+      font-size: 0.78rem;
+      font-family: var(--font-mono, monospace);
+      color: #cbd5e1;
+      font-weight: 600;
+    }
+    .sample-bank-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Coffee Presets Quick Tester */
+    .btn-p-robusta:hover, .btn-p-robusta.active, .btn-p-toraja:hover, .btn-p-toraja.active { border-color: #f59e0b; box-shadow: 0 0 12px rgba(245, 158, 11, 0.35); }
+    .btn-p-robusta .preset-pill, .btn-p-toraja .preset-pill { background: rgba(245, 158, 11, 0.2); color: #f59e0b; }
+    .btn-p-gayo:hover, .btn-p-gayo.active { border-color: #00f5d4; box-shadow: 0 0 12px rgba(0, 245, 212, 0.35); }
+    .btn-p-gayo .preset-pill { background: rgba(0, 245, 212, 0.2); color: #00f5d4; }
+    .btn-p-mandheling:hover, .btn-p-mandheling.active { border-color: #10b981; box-shadow: 0 0 12px rgba(16, 185, 129, 0.35); }
+    .btn-p-mandheling .preset-pill { background: rgba(16, 185, 129, 0.2); color: #10b981; }
+    .btn-p-wine:hover, .btn-p-wine.active { border-color: #f43f5e; box-shadow: 0 0 12px rgba(244, 63, 94, 0.35); }
+    .btn-p-wine .preset-pill { background: rgba(244, 63, 94, 0.2); color: #fb7185; }
+    .btn-p-liberika:hover, .btn-p-liberika.active { border-color: #a855f7; box-shadow: 0 0 12px rgba(168, 85, 247, 0.35); }
+    .btn-p-liberika .preset-pill { background: rgba(168, 85, 247, 0.2); color: #c084fc; }
+    .btn-p-ijen:hover, .btn-p-ijen.active { border-color: #ec4899; box-shadow: 0 0 12px rgba(236, 72, 153, 0.35); }
+    .btn-p-ijen .preset-pill { background: rgba(236, 72, 153, 0.2); color: #f472b6; }
+
+    /* TinyML Quick Sample Tester Buttons */
+    .tinyml-quick-tester {
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .quick-tester-label {
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: #94a3b8;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .quick-tester-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .btn-preset-grade {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(15, 23, 42, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 20px;
+      padding: 5px 12px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #e2e8f0;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .btn-preset-grade:hover {
+      transform: translateY(-2px);
+    }
+    .btn-preset-grade .preset-pill {
+      font-size: 0.68rem;
+      padding: 1px 6px;
+      border-radius: 10px;
+      font-weight: 700;
+      font-family: var(--font-mono, monospace);
+    }
+    .btn-g1:hover, .btn-g1.active { border-color: #00f5d4; box-shadow: 0 0 12px rgba(0, 245, 212, 0.35); }
+    .btn-g1 .preset-pill { background: rgba(0, 245, 212, 0.2); color: #00f5d4; }
+    .btn-g2:hover, .btn-g2.active { border-color: #10b981; box-shadow: 0 0 12px rgba(16, 185, 129, 0.35); }
+    .btn-g2 .preset-pill { background: rgba(16, 185, 129, 0.2); color: #10b981; }
+    .btn-g3:hover, .btn-g3.active { border-color: #f59e0b; box-shadow: 0 0 12px rgba(245, 158, 11, 0.35); }
+    .btn-g3 .preset-pill { background: rgba(245, 158, 11, 0.2); color: #f59e0b; }
+    .btn-g4:hover, .btn-g4.active { border-color: #f97316; box-shadow: 0 0 12px rgba(249, 115, 22, 0.35); }
+    .btn-g4 .preset-pill { background: rgba(249, 115, 22, 0.2); color: #f97316; }
+    .btn-g5:hover, .btn-g5.active { border-color: #ef4444; box-shadow: 0 0 12px rgba(239, 68, 68, 0.35); }
+    .btn-g5 .preset-pill { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+    .btn-reset:hover { border-color: #94a3b8; background: rgba(255, 255, 255, 0.08); }
+
+    /* Edge Impulse Feature Explorer Styles */
+    .feature-explorer-card {
+      margin-top: 24px !important;
+      padding: 22px 24px !important;
+    }
+    .explorer-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .explorer-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(139, 92, 246, 0.15);
+      border: 1px solid rgba(139, 92, 246, 0.35);
+      padding: 4px 12px;
+      border-radius: 20px;
+      margin-bottom: 6px;
+    }
+    .explorer-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #a855f7;
+      box-shadow: 0 0 8px #a855f7;
+    }
+    .explorer-brand {
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: #c084fc;
+    }
+    .explorer-tag {
+      font-size: 0.72rem;
+      color: #94a3b8;
+      border-left: 1px solid rgba(255, 255, 255, 0.15);
+      padding-left: 8px;
+    }
+    .explorer-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: #f8fafc;
+      margin: 4px 0 6px 0;
+    }
+    .explorer-desc {
+      font-size: 0.82rem;
+      color: #94a3b8;
+      margin: 0;
+    }
+    .axis-label {
+      font-size: 0.78rem;
+      color: #cbd5e1;
+      font-weight: 600;
+      margin-bottom: 4px;
+      display: block;
+    }
+    .explorer-body {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 20px;
+    }
+    @media (max-width: 1024px) {
+      .explorer-body {
+        grid-template-columns: 1fr;
+      }
+    }
+    .explorer-chart-box {
+      background: rgba(10, 15, 26, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+    }
+    .explorer-canvas-wrapper {
+      position: relative;
+      height: 380px;
+      width: 100%;
+    }
+    .cluster-overlay-status {
+      margin-top: 12px;
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(0, 245, 212, 0.35);
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-family: var(--font-mono, monospace);
+      font-size: 0.78rem;
+      color: #00f5d4;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .pulse-marker {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #00f5d4;
+      box-shadow: 0 0 10px #00f5d4;
+      animation: pulseTarget 1.5s infinite;
+    }
+    @keyframes pulseTarget {
+      0% { transform: scale(0.9); opacity: 0.7; }
+      50% { transform: scale(1.4); opacity: 1; box-shadow: 0 0 16px #00f5d4; }
+      100% { transform: scale(0.9); opacity: 0.7; }
+    }
+    .explorer-metrics-sidebar {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .metrics-panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .metrics-panel-title {
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: #f1f5f9;
+    }
+    .metrics-chip-acc {
+      background: rgba(16, 185, 129, 0.2);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      color: #10b981;
+      font-weight: 700;
+      font-size: 0.78rem;
+      padding: 3px 10px;
+      border-radius: 12px;
+    }
+    .metrics-grid-mini {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .m-card {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      padding: 8px 10px;
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+    }
+    .m-k {
+      font-size: 0.68rem;
+      color: #94a3b8;
+      text-transform: uppercase;
+      margin-bottom: 2px;
+    }
+    .m-v {
+      font-size: 0.85rem;
+      font-weight: 700;
+    }
+    .confusion-matrix-box {
+      background: rgba(15, 23, 42, 0.65);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 10px;
+      padding: 12px;
+    }
+    .cm-header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .cm-title {
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: #e2e8f0;
+    }
+    .cm-badge {
+      font-size: 0.65rem;
+      color: #94a3b8;
+      background: rgba(255, 255, 255, 0.06);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .cm-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.72rem;
+      text-align: center;
+      font-family: var(--font-mono, monospace);
+    }
+    .cm-table th, .cm-table td {
+      padding: 4px 3px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    .cm-table th {
+      color: #94a3b8;
+      font-weight: 600;
+    }
+    .cm-hit {
+      background: rgba(16, 185, 129, 0.25);
+      color: #34d399;
+      font-weight: 700;
+    }
+    .cm-mid {
+      background: rgba(245, 158, 11, 0.2);
+      color: #fbbf24;
+    }
+    .cm-legend-row {
+      margin-top: 8px;
+      text-align: center;
+      font-size: 0.66rem;
+      color: #64748b;
+    }
+  </style>
+</head>
+<body>
+  <!-- Ambient background lighting -->
+  <div class="ambient-glow glow-cyan"></div>
+  <div class="ambient-glow glow-violet"></div>
+  <div class="ambient-glow glow-amber"></div>
+  <div class="grid-overlay"></div>
+
+  <div class="app-layout">
+    <!-- =========================================================
+         SIDEBAR KIRI (Modular Floating Glassmorphic Cards)
+         ========================================================= -->
+    <aside class="sidebar">
+      
+      <!-- a. Card Header / Brand -->
+      <div class="glass-card brand-card">
+        <div class="brand-badge">
+          <div class="brand-icon-box coffee-icon-glow">
+            <!-- Modern Coffee Bean & Aroma Sensor SVG Icon -->
+            <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17 8h1a4 4 0 1 1 0 8h-1"></path>
+              <path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"></path>
+              <line x1="6" y1="2" x2="6" y2="4"></line>
+              <line x1="10" y1="2" x2="10" y2="4"></line>
+              <line x1="14" y1="2" x2="14" y2="4"></line>
+            </svg>
+          </div>
+          <div class="brand-text">
+            <h1 class="brand-title">E-Nose Robusta</h1>
+            <p class="brand-subtitle">Aroma Profiling & Quality Analyzer</p>
+          </div>
+        </div>
+        <div class="brand-meta">
+          <span class="version-tag">Robusta Pro v2.4</span>
+          <span class="engine-tag"><span class="engine-dot"></span>Ready for Rust Backend</span>
+        </div>
+      </div>
+
+      <!-- b. Card Serial Connection & Coffee Sample Metadata -->
+      <div class="glass-card panel-card">
+        <!-- 1. KONEKSI HARDWARE & SERIAL (SISTEM 1) -->
+        <div class="card-header">
+          <div class="card-header-title">
+            <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
+              <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
+              <line x1="6" y1="6" x2="6.01" y2="6"></line>
+              <line x1="6" y1="18" x2="6.01" y2="18"></line>
+            </svg>
+            <span>1. Koneksi Hardware ESP32</span>
+          </div>
+          <button id="btnRefreshPorts" class="icon-btn" title="Refresh Port List">
+            <svg class="refresh-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M23 4v6h-6"></path>
+              <path d="M1 20v-6h6"></path>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+          </button>
+        </div>
+
+        <div class="form-group">
+          <label for="portSelect" class="input-label">Hardware Port Chamber</label>
+          <div class="custom-select-wrapper">
+            <select id="portSelect" class="custom-select">
+              <option value="AZURE_IOT_HUB" selected>☁️ Nirkabel IoT • Wi-Fi Hotspot POCO (UDP 5005)</option>
+              <option value="COM6">🔌 COM6 • ESP32-S3 USB Serial</option>
+              <option value="SIM">🎮 SIM-01 • Simulator Robusta VOC</option>
+            </select>
+            <span class="select-arrow">▼</span>
+          </div>
+        </div>
+
+        <div class="form-group form-row">
+          <div class="col-half">
+            <label for="baudSelect" class="input-label">Baud Rate</label>
+            <div class="custom-select-wrapper">
+              <select id="baudSelect" class="custom-select">
+                <option value="115200" selected>115200</option>
+                <option value="57600">57600</option>
+                <option value="9600">9600</option>
+              </select>
+              <span class="select-arrow">▼</span>
+            </div>
+          </div>
+          <div class="col-half">
+            <label for="sampleInterval" class="input-label">Sampling Interval</label>
+            <div class="custom-select-wrapper">
+              <select id="sampleInterval" class="custom-select">
+                <option value="100">100 ms • 10 Hz</option>
+                <option value="250" selected>250 ms • 4 Hz</option>
+                <option value="500">500 ms • 2 Hz</option>
+                <option value="1000">1000 ms • 1 Hz</option>
+              </select>
+              <span class="select-arrow">▼</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ESP32 Hardware & Wi-Fi Live Status Badge -->
+        <div class="esp-status-card" id="espStatusBox">
+          <div class="esp-status-header">
+            <div class="esp-status-indicator">
+              <span class="esp-status-dot" style="background: #94a3b8; box-shadow: none;"></span>
+              <span class="esp-status-title">Hardware Link: ESP32-S3</span>
+            </div>
+            <span class="esp-badge" id="espBadge" style="background: #1e293b; color: #94a3b8; border: 1px solid #334155;">STANDBY</span>
+          </div>
+          <div class="esp-status-details">
+            <div class="esp-detail-row">
+              <span class="esp-detail-label">Jalur Data:</span>
+              <span class="esp-detail-value font-mono text-muted" id="espDetailPort">Memeriksa Perangkat...</span>
+            </div>
+            <div class="esp-detail-row">
+              <span class="esp-detail-label">Wi-Fi & IP:</span>
+              <span class="esp-detail-value font-mono text-muted" id="espDetailWifi">Hotspot POCO (Standby)</span>
+            </div>
+            <div class="esp-detail-row">
+              <span class="esp-detail-label">Status ESP32:</span>
+              <span class="esp-detail-value font-mono text-muted" id="espDetailLed">⚫ Standby</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- SISTEM 1: KONEK KE PERANGKAT (STANDBY LINK) -->
+        <button id="btnConnect" class="btn btn-primary btn-block btn-connect">
+          <span class="btn-glow"></span>
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
+            <line x1="12" y1="2" x2="12" y2="12"></line>
+          </svg>
+          <span id="btnConnectText">1. Connect Device</span>
+        </button>
+
+        <!-- 2. KONFIGURASI TUNGGAL SAMPEL KOPI (SISTEM 2) -->
+        <div style="margin: 18px 0 12px 0; border-top: 1px solid rgba(255, 255, 255, 0.1); padding-top: 14px; display: flex; align-items: center; justify-content: space-between;">
+          <div style="display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: 0.82rem; color: #00f5d4;">
+            <span>☕</span>
+            <span>2. Konfigurasi Sampel Kopi</span>
+          </div>
+          <span class="badge-mini" style="background: rgba(0, 245, 212, 0.15); color: #00f5d4; border: 1px solid rgba(0, 245, 212, 0.3);">Group: G05 • DAQ-05</span>
+        </div>
+
+        <div class="form-group">
+          <label for="coffeePresetSelect" class="input-label" style="display: flex; justify-content: space-between;">
+            <span>Daftar Pilihan Kopi Lab (16 Kelompok)</span>
+            <span style="color: #00f5d4; font-size: 0.68rem; font-weight: 600;">Resmi Lab</span>
+          </label>
+          <div class="custom-select-wrapper">
+            <select id="coffeePresetSelect" class="custom-select" onchange="selectCoffeePreset(this.value)">
+              <option value="C01">01 • Arabica Mandheling (Sumatra)</option>
+              <option value="C02">02 • Arabica (Java Preanger)</option>
+              <option value="C03">03 • Arabica (Aceh Gayo)</option>
+              <option value="C04">04 • Robusta Dark Wine</option>
+              <option value="C05" selected>05 • Robusta (Toraja)</option>
+              <option value="C06">06 • Excelso Robusta Gold</option>
+              <option value="C07">07 • Robusta (Argopuro)</option>
+              <option value="C08">08 • Robusta Lampung (roasted beans)</option>
+              <option value="C09">09 • Robusta (Temanggung)</option>
+              <option value="C10">10 • Arabica Flores</option>
+              <option value="C11">11 • Arabica IJEN</option>
+              <option value="C12">12 • Arabica Cakrabuana Tasikmalaya</option>
+              <option value="C13">13 • Robusta Gayo (Aceh)</option>
+              <option value="C14">14 • Arabica Commercial Espresso Asli</option>
+              <option value="C15">15 • Arabica Kalosi Bonebone</option>
+              <option value="C16">16 • Robusta (Bali Kintamani)</option>
+            </select>
+            <span class="select-arrow">▼</span>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="coffeeName" class="input-label" style="display: flex; justify-content: space-between;">
+            <span>Nama / Jenis Kopi (Label Training AI)</span>
+            <span style="color: #475569; font-size: 0.68rem;">*Bisa Diedit Manual</span>
+          </label>
+          <input type="text" id="coffeeName" class="form-control font-bold coffee-name-input" value="Robusta (Toraja)" placeholder="Nama sampel kopi..." />
+        </div>
+
+        <div class="form-group form-row compact-id-row">
+          <div class="col-half compact-id-field">
+            <label for="coffeeId" class="input-label" title="Coffee ID (Brief S.24)">Coffee ID (Brief S.24)</label>
+            <input type="text" id="coffeeId" class="form-control font-mono sample-id-input" value="C05" placeholder="Misal: C05, C01" title="Coffee ID (Brief S.24)" />
+          </div>
+          <div class="col-half compact-id-field">
+            <label for="measurementId" class="input-label" title="Measurement ID">Measurement ID</label>
+            <input type="text" id="measurementId" class="form-control font-mono sample-id-input" value="M01" placeholder="Misal: M01, M02" title="Measurement ID" />
+          </div>
+        </div>
+
+        <div class="form-group form-row">
+          <div class="col-half">
+            <label for="coffeeOrigin" class="input-label">Origin Kopi</label>
+            <div class="custom-select-wrapper">
+              <select id="coffeeOrigin" class="custom-select">
+                <option value="Toraja - Sulawesi" selected>Toraja • Sulawesi</option>
+                <option value="Mandheling - Sumatra">Mandheling • Sumatra</option>
+                <option value="Java Preanger - Jabar">Java Preanger • Jawa Barat</option>
+                <option value="Gayo - Aceh">Gayo • Aceh</option>
+                <option value="Argopuro - Jatim">Argopuro • Jawa Timur</option>
+                <option value="Lampung">Lampung</option>
+                <option value="Temanggung - Jateng">Temanggung • Jawa Tengah</option>
+                <option value="Flores - NTT">Flores • NTT</option>
+                <option value="Ijen - Banyuwangi">Ijen • Banyuwangi</option>
+                <option value="Cakrabuana - Tasikmalaya">Cakrabuana • Tasikmalaya</option>
+                <option value="Kalosi Bonebone - Sulawesi">Kalosi Bonebone • Sulawesi</option>
+                <option value="Kintamani - Bali">Kintamani • Bali</option>
+                <option value="Commercial Blend">Commercial Blend / Espresso</option>
+                <option value="Dampit - Malang">Dampit • Malang</option>
+              </select>
+              <span class="select-arrow">▼</span>
+            </div>
+          </div>
+          <div class="col-half">
+            <label for="coffeeRoast" class="input-label">Tingkat Sangrai</label>
+            <div class="custom-select-wrapper">
+              <select id="coffeeRoast" class="custom-select">
+                <option value="Medium Roast" selected>Medium Roast</option>
+                <option value="Dark Roast">Dark Roast</option>
+                <option value="Light Roast">Light Roast</option>
+                <option value="Fermented / Honey">Fermented / Honey</option>
+              </select>
+              <span class="select-arrow">▼</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group form-row">
+          <div class="col-half">
+            <label class="input-label" title="Durasi SOP Pengujian">Durasi SOP Pengujian</label>
+            <input type="text" class="form-control font-mono compact-meta-field sop-field" value="300 Detik (SOP G05)" title="Durasi SOP Pengujian: 300 Detik (SOP G05)" readonly />
+          </div>
+          <div class="col-half">
+            <label class="input-label" title="Target Alur AI">Target Alur AI</label>
+            <input type="text" class="form-control font-mono compact-meta-field tinyml-field" value="Adaptive TinyML" title="Target Alur AI: Adaptive TinyML" readonly />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="coffeeOperatorNotes" class="input-label">Catatan QC / Operator</label>
+          <input type="text" id="coffeeOperatorNotes" class="form-control" value="Pengujian Standar E-Nose G05 Lab" placeholder="Catatan operator atau sensorik" />
+        </div>
+
+        <!-- TOMBOL TUNGGAL START SAMPLING 300 DETIK -->
+        <button id="btnStartSampling" class="btn btn-emerald btn-block btn-sampling" style="margin-top: 14px;">
+          <span class="btn-glow"></span>
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+          </svg>
+          <span id="btnStartSamplingText">2. Start Sampling (300s)</span>
+        </button>
+
+        <!-- TOMBOL CEPAT TRAINING EDGE TINYML STUDIO -->
+        <button id="btnOpenTrainingModal" class="btn btn-outline btn-block" style="margin-top: 8px; border-color: rgba(168, 85, 247, 0.4); color: #c084fc;">
+          <svg class="btn-icon text-violet" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path>
+          </svg>
+          <span id="btnSidebarTrainText">⚡ 3. Training with Edge Impulse</span>
+        </button>
+      </div>
+
+      <!-- c. Card Data Export (Nota Struk Kopi Robusta) -->
+      <div class="glass-card panel-card">
+        <div class="card-header">
+          <div class="card-header-title">
+            <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            <span>Laporan & Export Data</span>
+          </div>
+          <span class="badge-mini">Robusta QC</span>
+        </div>
+
+        <div class="export-actions">
+          <!-- Cloud Sync Actions (Cosmos DB & Edge Impulse) -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 8px;">
+            <button id="btnSyncCosmos" class="btn btn-outline" style="border-color: rgba(0, 245, 212, 0.4); color: #00f5d4; padding: 7px 6px; font-size: 0.72rem;" title="Kirim data sampel ke Azure Cosmos DB (enose_db/telemetry)">
+              <span>☁️ Sync Cosmos DB</span>
+            </button>
+            <button id="btnSyncEdgeImpulse" class="btn btn-outline" style="border-color: rgba(192, 132, 252, 0.4); color: #c084fc; padding: 7px 6px; font-size: 0.72rem;" title="Kirim data time-series langsung ke Edge Impulse Ingestion API">
+              <span>☁️ Sync Edge Impulse</span>
+            </button>
+          </div>
+
+          <!-- Excel / CSV / JSON Export Grid -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 8px;">
+            <button id="btnExportRawCSVSidebar" class="btn btn-outline" style="padding: 7px 6px; font-size: 0.72rem; border-color: rgba(56, 189, 248, 0.4); color: #38bdf8;" title="Unduh Raw Sampling CSV (DAQ-05_B01_C05_A01_M01.csv)">
+              <span>📄 Raw CSV (G05)</span>
+            </button>
+            <button id="btnExportMetaCSVSidebar" class="btn btn-outline" style="padding: 7px 6px; font-size: 0.72rem; border-color: rgba(251, 191, 36, 0.4); color: #fbbf24;" title="Unduh Metadata Pengukuran (measurement_metadata.csv)">
+              <span>📋 Metadata CSV</span>
+            </button>
+            <button id="btnSaveSamplingJson" class="btn btn-outline" style="padding: 7px 6px; font-size: 0.72rem; border-color: rgba(192, 132, 252, 0.4); color: #c084fc;" title="Unduh format JSON resmi Edge Impulse v1">
+              <span>☁️ Edge Impulse JSON</span>
+            </button>
+            <button id="btnExportFeatureCSVSidebar" class="btn btn-outline" style="padding: 7px 6px; font-size: 0.72rem; border-color: rgba(236, 72, 153, 0.4); color: #f472b6;" title="Unduh Feature Extraction Dataset (8 fitur per channel)">
+              <span>📈 Feature CSV</span>
+            </button>
+          </div>
+          <button id="btnExportCSV" class="btn btn-outline btn-block">
+            <svg class="btn-icon text-emerald" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="16" y1="13" x2="8" y2="13"></line>
+              <line x1="16" y1="17" x2="8" y2="17"></line>
+              <polyline points="10 9 9 9 8 9"></polyline>
+            </svg>
+            <span>Export Full Telemetry (CSV)</span>
+          </button>
+
+          <!-- PDF Export (Fitur Utama: Struk / Nota Uji Mutu Kopi Digital) -->
+          <button id="btnExportPDF" class="btn btn-primary-gradient btn-block btn-pdf">
+            <div class="btn-highlight-shine"></div>
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M6 2h12a2 2 0 0 1 2 2v16l-4-2-4 2-4-2-4 2V4a2 2 0 0 1 2-2z"></path>
+              <line x1="9" y1="9" x2="15" y2="9"></line>
+              <line x1="9" y1="13" x2="13" y2="13"></line>
+            </svg>
+            <div class="btn-text-group">
+              <span class="btn-title">Export Coffee Quality Slip</span>
+              <span class="btn-desc">Nota Digital Hasil Uji Aroma Robusta</span>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      <!-- d. Card Graph Options -->
+      <div class="glass-card panel-card">
+        <div class="card-header">
+          <div class="card-header-title">
+            <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+            <span>Graph & Purge Options</span>
+          </div>
+        </div>
+
+        <div class="option-row">
+          <div class="option-info">
+            <span class="option-label">Auto Scale (Lock 0,0)</span>
+            <span class="option-desc">Kunci sumbu Y minimum dari 0 mV</span>
+          </div>
+          <label class="modern-toggle">
+            <input type="checkbox" id="toggleAutoScale" checked />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div class="option-row">
+          <div class="option-info">
+            <span class="option-label">Show Area Gradient</span>
+            <span class="option-desc">Efek glow gradasi bawah kurva sensor</span>
+          </div>
+          <label class="modern-toggle">
+            <input type="checkbox" id="toggleGradient" checked />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <button id="btnClearGraph" class="btn btn-danger-ghost btn-block">
+          <svg class="btn-icon text-danger" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+          </svg>
+          <span>Reset Buffer & Purge Chamber</span>
+        </button>
+      </div>
+
+      <!-- e. Card Live Status -->
+      <div class="glass-card status-card">
+        <div class="card-header">
+          <div class="card-header-title">
+            <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+            </svg>
+            <span>Status Headspace & Telemetri</span>
+          </div>
+        </div>
+
+        <div class="status-indicator-badge status-idle" id="statusBadge">
+          <span class="status-dot">
+            <span class="pulse-ring"></span>
+          </span>
+          <span id="statusText" class="status-text">Menunggu koneksi chamber...</span>
+        </div>
+
+        <div class="telemetry-grid">
+          <div class="telemetry-item">
+            <span class="telem-label">Data Points</span>
+            <span id="statPoints" class="telem-value">0</span>
+          </div>
+          <div class="telemetry-item">
+            <span class="telem-label">Uptime</span>
+            <span id="statUptime" class="telem-value">00:00</span>
+          </div>
+          <div class="telemetry-item">
+            <span class="telem-label">Sampling Rate</span>
+            <span id="statRate" class="telem-value">4.0 Hz</span>
+          </div>
+          <div class="telemetry-item">
+            <span class="telem-label">Peak Aroma (mV)</span>
+            <span id="statPeak" class="telem-value">0 mV</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- f. Card Device & OTA Management (ThingsBoard Style) -->
+      <div class="glass-card panel-card ota-card">
+        <div class="card-header">
+          <div class="card-header-title">
+            <svg class="section-icon text-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+              <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+              <line x1="12" y1="22.08" x2="12" y2="12"></line>
+            </svg>
+            <span>ThingsBoard OTA Package</span>
+          </div>
+          <span class="badge-mini badge-ota" id="otaTargetDevice">ESP32-S3 N16R8</span>
+        </div>
+
+        <!-- Firmware Version Status Summary -->
+        <div class="ota-version-box">
+          <div class="ota-version-col">
+            <span class="ota-label">Active on Device</span>
+            <span class="ota-version-val font-bold" id="activeFwVersion">v1.0.5</span>
+          </div>
+          <div class="ota-version-col">
+            <span class="ota-label">Target Package</span>
+            <span class="ota-version-val text-cyan font-bold" id="cloudFwVersion">v1.0.5</span>
+          </div>
+          <button id="btnCheckUpdate" class="btn-ota-check" title="Sinkronisasi status paket dari repository">
+            Sync Repo
+          </button>
+        </div>
+
+        <!-- ThingsBoard OTA Package Form -->
+        <div class="ota-package-form" style="display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.5rem;">
+          
+          <!-- 1. Package Title / Name -->
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="input-label" style="font-size: 0.72rem; color: #94a3b8; display: flex; justify-content: space-between;">
+              <span>Package Title</span>
+              <span style="color: #00f5d4; font-size: 0.68rem;">Type: Firmware</span>
+            </label>
+            <input type="text" id="otaPackageTitle" class="form-control" value="Robusta Olfactory TinyML Core Firmware" style="width: 100%; background: #0b1120; border: 1px solid #1e293b; color: #f8fafc; border-radius: 6px; padding: 0.35rem 0.55rem; font-size: 0.78rem;" />
+          </div>
+
+          <!-- 2. Target Version Input (Ketik versi bebas, misal: 1.0.1, 1.0.2, 1.0.3, 1.0.4, dll.) -->
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="input-label" style="font-size: 0.72rem; color: #94a3b8; display: flex; justify-content: space-between;">
+              <span>Target Version (Ketik Versi Baru)</span>
+              <span id="otaVersionTag" style="color: #38bdf8; font-family: monospace; font-size: 0.68rem; font-weight: bold;">v1.0.5</span>
+            </label>
+            <div style="position: relative; width: 100%;">
+              <input type="text" id="otaVersionInput" list="otaVersionList" class="form-control" placeholder="Ketik versi, misal: 1.0.5" value="1.0.5" style="width: 100%; background: #0b1120; border: 1px solid #1e293b; color: #38bdf8; border-radius: 6px; padding: 0.38rem 0.55rem; font-size: 0.8rem; font-weight: 600; font-family: monospace;" autocomplete="off" />
+              <datalist id="otaVersionList">
+                <option value="1.0.5">1.0.5 • Aura Cyber-Pulse + TinyML</option>
+                <option value="1.0.4">1.0.4 • TinyML AI + Gold-Cyan-Magenta</option>
+                <option value="1.0.3">1.0.3 • Ungu-Oranye-Cyan</option>
+                <option value="1.0.2">1.0.2 • Pink-Cyan-Hijau</option>
+                <option value="1.0.1">1.0.1 • Merah-Kuning-Hijau-Biru</option>
+              </datalist>
+            </div>
+          </div>
+
+          <!-- 3. Target Device ID -->
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="input-label" style="font-size: 0.72rem; color: #94a3b8;">Target Device ID</label>
+            <input type="text" id="otaTargetDeviceId" class="form-control" value="enose-robusta-device-01" readonly style="width: 100%; background: #080d1a; border: 1px solid #1e293b; color: #64748b; border-radius: 6px; padding: 0.35rem 0.55rem; font-size: 0.75rem; font-family: monospace;" />
+          </div>
+
+          <!-- 4. Binary File Upload (.bin) -->
+          <div class="form-group ota-file-group" style="margin-bottom: 0;">
+            <label for="otaFileInput" class="ota-file-label" style="padding: 0.45rem 0.6rem; font-size: 0.75rem; border-radius: 6px; background: #0b1120; border: 1px dashed #38bdf8; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+              <div style="display: flex; align-items: center; gap: 6px; overflow: hidden;">
+                <svg class="ota-upload-icon text-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px; flex-shrink: 0;">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="17 8 12 3 7 8"></polyline>
+                  <line x1="12" y1="3" x2="12" y2="15"></line>
+                </svg>
+                <span id="otaFileName" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #f8fafc; font-weight: 500;">firmware_v1.0.5.bin • 573 KB</span>
+              </div>
+              <span class="badge-mini" style="font-size: 0.68rem; background: #0284c7; color: #fff; padding: 2px 7px; border-radius: 4px; font-weight: 600; flex-shrink: 0;">Pilih .bin</span>
+            </label>
+            <input type="file" id="otaFileInput" accept=".bin" style="display: none;" />
+          </div>
+
+          <!-- 5. Release Notes / Changelog -->
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="input-label" style="font-size: 0.72rem; color: #94a3b8;">Release Notes & Deskripsi</label>
+            <textarea id="otaReleaseNotes" rows="2" class="form-control" style="width: 100%; background: #0b1120; border: 1px solid #1e293b; color: #cbd5e1; border-radius: 6px; padding: 0.35rem 0.55rem; font-size: 0.72rem; resize: none;">Firmware v1.0.5: Aura Cyber-Pulse RGB + On-Device TinyML classifier enhancement for robust coffee aroma sensing.</textarea>
+          </div>
+
+        </div>
+
+        <!-- ThingsBoard Action Button: Assign & Deploy -->
+        <button id="btnPushOTA" class="btn btn-primary-gradient btn-block btn-ota-push" style="margin-top: 0.75rem;">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+          </svg>
+          <span id="btnPushOTAText">Assign & Push Package</span>
+        </button>
+
+        <!-- Realtime Live OTA Download & Flash Monitor -->
+        <div class="ota-progress-container" id="otaProgressBox" style="margin-top: 0.6rem;">
+          <div class="ota-progress-header">
+            <span class="ota-status-label" id="otaStatusText">Device Ready • Polling 15s</span>
+            <span class="ota-percent font-mono" id="otaPercent">0%</span>
+          </div>
+          <div class="ota-progress-track">
+            <div class="ota-progress-bar" id="otaProgressBar" style="width: 0%"></div>
+          </div>
+        </div>
+      </div>
+
+    </aside>
+
+    <!-- =========================================================
+         AREA UTAMA (Header, Prediksi Mutu, Sensor Cards, Chart)
+         ========================================================= -->
+    <main class="main-content">
+      
+      <!-- Top Bar / Action Header -->
+      <header class="main-header glass-card">
+        <!-- Top Tier: Title & Main Control Actions -->
+        <div class="header-main-bar">
+          <div class="header-left">
+            <div class="title-with-pill">
+              <h2 class="main-title">Robusta Coffee Aroma Telemetry</h2>
+              <div class="live-pill" id="livePill" style="display: none;">
+                <span class="live-dot"></span>
+                <span class="live-text">STREAMING AROMA</span>
+              </div>
+            </div>
+            <p class="main-caption">Headspace VOCs extraction & electronic olfactory response on <i>Coffea canephora</i></p>
+          </div>
+
+          <div class="header-quick-actions">
+            <!-- RGB LED Onboard 8-State Indication -->
+            <div class="rgb-led-badge" id="rgbLedStatusBadge" title="ESP32-S3 Onboard WS2812 RGB LED Status">
+              <span class="rgb-dot" id="rgbLedDot"></span>
+              <span id="rgbLedText" class="font-mono">STANDBY</span>
+            </div>
+
+            <!-- Hardware Testing & Reset Action Buttons -->
+            <button id="btnPurgeChamber" class="btn btn-outline btn-purge" title="Reset baseline pembacaan sensor chamber">
+              <svg class="btn-icon text-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2"></path>
+              </svg>
+              <span>Reset Baseline</span>
+            </button>
+            <button id="btnTestSensors" class="btn btn-outline btn-test-sensors" title="Diagnostik scan I2C dan baca ulang DHT22">
+              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+              </svg>
+              <span>🔬 Cek Sensor</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Bottom Tier: Unified Live Telemetry & Pipeline Status Strip -->
+        <div class="header-status-strip">
+          <div class="status-strip-cluster">
+            <span class="status-strip-label">CLOUD &amp; AI PIPELINES</span>
+            <div class="status-strip-items">
+              <!-- Azure Cloud Sync Badge -->
+              <div class="header-chip azure-cloud-badge" title="Microsoft Azure IoT Hub Hubungkan &amp; Sinkronkan">
+                <div class="azure-status connected" id="azureStatus">
+                  <span class="azure-dot"></span>
+                </div>
+                <div class="chip-info">
+                  <span class="chip-tag">Azure IoT Hub</span>
+                  <span id="azureStatusText" class="chip-text font-mono" style="color: #10b981;">Online: Azure IoT Hub</span>
+                </div>
+              </div>
+
+              <!-- Azure Cosmos DB Sync Badge (Akun B) -->
+              <div class="header-chip cosmos-cloud-badge" title="Azure Cosmos DB NoSQL Cloud (enose_db / telemetry)">
+                <div class="azure-status connected" id="cosmosStatus">
+                  <span class="azure-dot" style="background: #00f5d4; box-shadow: 0 0 8px #00f5d4;"></span>
+                </div>
+                <div class="chip-info">
+                  <span class="chip-tag text-cyan">Cosmos DB</span>
+                  <span id="cosmosStatusText" class="chip-text font-mono text-cyan">Online: enose_db</span>
+                </div>
+              </div>
+
+              <!-- Edge Impulse Cloud Sync Badge -->
+              <div class="header-chip edge-impulse-badge" title="Edge Impulse Studio (FebriFrmansyah-project-1 / 827201)">
+                <div class="azure-status connected" id="eiStatusBadge">
+                  <span class="azure-dot" style="background: #c084fc; box-shadow: 0 0 8px #c084fc;"></span>
+                </div>
+                <div class="chip-info">
+                  <span class="chip-tag text-purple">Edge Impulse</span>
+                  <span id="eiStatusText" class="chip-text font-mono text-purple">Online: Project 827201</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="status-strip-cluster">
+            <span class="status-strip-label">CHAMBER ENVIRONMENT</span>
+            <div class="status-strip-items">
+              <!-- DHT22 #1: Inlet GPIO 5 -->
+              <div class="header-chip dht-chip" title="DHT22 Sensor Chamber (GPIO 5, 3.3V, GND)">
+                <span class="chip-icon">🌡️</span>
+                <div class="chip-info">
+                  <span class="chip-tag">Chamber (GPIO 5)</span>
+                  <span class="chip-text font-mono"><span id="dht1Temp">--.-</span> °C • <span id="dht1Hum">--.-</span> %RH</span>
+                </div>
+              </div>
+
+              <!-- DHT22 #2: Exhaust GPIO 11 -->
+              <div class="header-chip dht-chip" title="DHT22 #2 di Exhaust Chamber (GPIO 11)">
+                <span class="chip-icon">💨</span>
+                <div class="chip-info">
+                  <span class="chip-tag">Exhaust (GPIO 11)</span>
+                  <span class="chip-text font-mono"><span id="dht2Temp">--.-</span> °C • <span id="dht2Hum">--.-</span> %RH</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- LIVE PREDICTION & FINGERPRINT BANNER -->
+      <section class="glass-card coffee-quality-banner">
+        <div class="banner-left">
+          <div class="coffee-bean-pill">
+            <span class="bean-dot"></span>
+            <span class="bean-label">KLASIFIKASI JENIS KOPI (TINYML)</span>
+          </div>
+          <div class="prediction-info">
+            <h4 class="prediction-title" id="predTitle">Baseline Stabil — Menunggu Injeksi Sampel Kopi</h4>
+            <p class="prediction-desc" id="predDesc">Sensor chamber dalam kondisi purging udara bersih. Masukkan sampel headspace bubuk/biji kopi ke chamber untuk menganalisis profil aroma multi-kanal.</p>
+          </div>
+        </div>
+        <div class="banner-right">
+          <div class="grade-badge" id="predGradeBadge">
+            <span class="grade-label">Jenis Terdeteksi</span>
+            <span class="grade-value" id="predGrade">STANDBY</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- TINYML ON-DEVICE (ESP32-S3 BARE-METAL) INFERENCE PANEL -->
+      <section class="glass-card tinyml-panel" id="tinymlCard">
+        <div class="tinyml-header">
+          <div class="tinyml-title-group">
+            <div class="tinyml-chip-badge">
+              <span class="engine-dot" style="background:#00f5d4;box-shadow:0 0 8px #00f5d4;"></span>
+              <span class="tinyml-chip-text font-bold">TinyML On-Device (ESP32-S3)</span>
+            </div>
+            <span class="tinyml-mode-tag font-mono">Bare-Metal no_std • Adaptive Softmax Classifier • 8-Channel Gas Respon</span>
+          </div>
+          <div class="tinyml-metrics-meta">
+            <div class="tinyml-meta-item">
+              <span class="tinyml-meta-label">On-Chip Latency</span>
+              <span class="tinyml-meta-val font-mono text-cyan" id="tinymlLatency">< 3 µs</span>
+            </div>
+            <div class="tinyml-meta-item">
+              <span class="tinyml-meta-label">Confidence</span>
+              <span class="tinyml-meta-val font-mono text-success" id="tinymlConfidence">--%</span>
+            </div>
+            <div class="tinyml-meta-item">
+              <span class="tinyml-meta-label">Trained Classes</span>
+              <span class="tinyml-meta-val font-mono text-violet" id="tinymlTrainedClassesCount">0 Jenis</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- DYNAMIC TRAINED CLASSES PROBABILITY CONTAINER -->
+        <div class="tinyml-dynamic-classes-container" id="tinymlClassesGrid">
+          <div class="tinyml-empty-state" id="tinymlEmptyState">
+            <div class="empty-state-icon">🤖</div>
+            <div class="empty-state-text">
+              <strong>Belum Ada Model AI Terlatih Dari Hasil Sampling</strong>
+              <p>Jalankan siklus pengujian chamber (300s SOP) atau klik tombol <em>Uji Cepat Profil Sensor</em> di bawah, lalu klik <strong>"Simpan ke Bank Dataset AI"</strong> dan <strong>"Latih Model TinyML Sekarang"</strong>.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- DATASET SAMPLE BANK TOOLBAR -->
+        <div class="sample-bank-toolbar">
+          <div class="sample-bank-status">
+            <span class="bank-dot"></span>
+            <span class="bank-summary-text" id="sampleBankSummary">📦 Bank Sampel: 0 sampel tersimpan (0 jenis kopi)</span>
+          </div>
+          <div class="sample-bank-actions">
+            <button type="button" class="btn btn-primary-gradient btn-sm" id="btnTrainTinyMlPanel" style="font-size: 0.78rem; padding: 6px 14px; font-weight: 700;">
+              ⚡ Latih Model TinyML
+            </button>
+            <button type="button" class="btn btn-outline btn-sm" id="btnClearSampleBank" style="font-size: 0.74rem; padding: 5px 12px; color: #ef4444; border-color: rgba(239, 68, 68, 0.4);" title="Hapus seluruh riwayat sampel di bank lokal browser">
+              🗑️ Reset Bank Dataset
+            </button>
+          </div>
+        </div>
+
+        <!-- QUICK TEST SAMPLES BAR (UJI CEPAT SAMPEL NYATA KOPI) -->
+        <div class="tinyml-quick-tester">
+          <div class="quick-tester-label">
+            <span class="quick-tester-icon">⚡</span>
+            <span>Uji Cepat Profil Sensor Kopi (Daftar 16 Kelompok Lab):</span>
+          </div>
+          <div class="quick-tester-buttons" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <div class="custom-select-wrapper" style="width: auto; min-width: 260px;">
+              <select id="quickSampleSelect" class="custom-select" style="padding: 6px 30px 6px 12px; font-size: 0.78rem; border-color: rgba(0, 245, 212, 0.4); color: #00f5d4;" onchange="selectCoffeePreset(this.value)">
+                <option value="" disabled>-- Pilih 16 Jenis Kopi Lab --</option>
+                <option value="C01">01. Arabica Mandheling (Sumatra)</option>
+                <option value="C02">02. Arabica (Java Preanger)</option>
+                <option value="C03">03. Arabica (Aceh Gayo)</option>
+                <option value="C04">04. Robusta Dark Wine</option>
+                <option value="C05" selected>05. Robusta (Toraja) [Grup G05]</option>
+                <option value="C06">06. Excelso Robusta Gold</option>
+                <option value="C07">07. Robusta (Argopuro)</option>
+                <option value="C08">08. Robusta Lampung (roasted beans)</option>
+                <option value="C09">09. Robusta (Temanggung)</option>
+                <option value="C10">10. Arabica Flores</option>
+                <option value="C11">11. Arabica IJEN</option>
+                <option value="C12">12. Arabica Cakrabuana Tasikmalaya</option>
+                <option value="C13">13. Robusta Gayo (Aceh)</option>
+                <option value="C14">14. Arabica Commercial Espresso Asli</option>
+                <option value="C15">15. Arabica Kalosi Bonebone</option>
+                <option value="C16">16. Robusta (Bali Kintamani)</option>
+              </select>
+              <span class="select-arrow">▼</span>
+            </div>
+            <button type="button" class="btn-preset-grade btn-p-toraja active" onclick="selectCoffeePreset('C05')" title="Injeksi Robusta (Toraja) [Grup G05]">
+              <span class="preset-pill">☕</span>
+              <span class="preset-name">Robusta Toraja</span>
+            </button>
+            <button type="button" class="btn-preset-grade btn-p-mandheling" onclick="selectCoffeePreset('C01')" title="Injeksi Arabica Mandheling (Sumatra)">
+              <span class="preset-pill">🌿</span>
+              <span class="preset-name">Mandheling</span>
+            </button>
+            <button type="button" class="btn-preset-grade btn-p-gayo" onclick="selectCoffeePreset('C03')" title="Injeksi Arabica (Aceh Gayo)">
+              <span class="preset-pill">🍃</span>
+              <span class="preset-name">Aceh Gayo</span>
+            </button>
+            <button type="button" class="btn-preset-grade btn-p-wine" onclick="selectCoffeePreset('C04')" title="Injeksi Robusta Dark Wine">
+              <span class="preset-pill">🍷</span>
+              <span class="preset-name">Dark Wine</span>
+            </button>
+            <button type="button" class="btn-preset-grade btn-reset" onclick="injectPresetSample(null)" title="Reset Sensor ke Udara Bersih Standby">
+              <span class="preset-pill">🔄</span>
+              <span class="preset-name">Standby</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- SENSOR METRIC CARDS STRIP (8 CHANNEL GAS SENSORS SIKLUS SOP G05) -->
+      <section class="sensor-cards-grid">
+        <!-- Sensor 1: MQ-6 (LPG, Butana, Hidrokarbon Ringan - ADS1115 #1 A0 0x48) -->
+        <div class="glass-card sensor-card sensor-mq6" data-sensor="0">
+          <div class="sensor-card-top">
+            <div class="sensor-identity">
+              <span class="sensor-tag">CH 01 • 0x48 A0</span>
+              <h3 class="sensor-name">MQ-6</h3>
+              <span class="sensor-gas-type">LPG & Butana • Hidrokarbon</span>
+            </div>
+            <label class="channel-toggle" title="Toggle Channel Visibility">
+              <input type="checkbox" id="chkSensor0" checked />
+              <span class="channel-check-dot"></span>
+            </label>
+          </div>
+          <div class="sensor-metric">
+            <span id="valSensor0" class="metric-number">0.00</span>
+            <span class="metric-unit">mV</span>
+          </div>
+          <div class="sensor-stats-footer">
+            <div class="stat-col"><span class="stat-k">Min</span><span id="minSensor0" class="stat-v">0</span></div>
+            <div class="stat-col"><span class="stat-k">Avg</span><span id="avgSensor0" class="stat-v">0</span></div>
+            <div class="stat-col"><span class="stat-k">Max</span><span id="maxSensor0" class="stat-v">0</span></div>
+          </div>
+        </div>
+
+        <!-- Sensor 2: MQ-135 (Air Quality, Furans & NH3 - ADS1115 #1 A1 0x48) -->
+        <div class="glass-card sensor-card sensor-mq135" data-sensor="1">
+          <div class="sensor-card-top">
+            <div class="sensor-identity">
+              <span class="sensor-tag">CH 02 • 0x48 A1</span>
+              <h3 class="sensor-name">MQ-135</h3>
+              <span class="sensor-gas-type">Furans & VOC • Karamelisasi</span>
+            </div>
+            <label class="channel-toggle" title="Toggle Channel Visibility">
+              <input type="checkbox" id="chkSensor1" checked />
+              <span class="channel-check-dot"></span>
+            </label>
+          </div>
+          <div class="sensor-metric">
+            <span id="valSensor1" class="metric-number">0.00</span>
+            <span class="metric-unit">mV</span>
+          </div>
+          <div class="sensor-stats-footer">
+            <div class="stat-col"><span class="stat-k">Min</span><span id="minSensor1" class="stat-v">0</span></div>
+            <div class="stat-col"><span class="stat-k">Avg</span><span id="avgSensor1" class="stat-v">0</span></div>
+            <div class="stat-col"><span class="stat-k">Max</span><span id="maxSensor1" class="stat-v">0</span></div>
+          </div>
+        </div>
+
+        <!-- Sensor 3: MQ-3 (Alcohols & Esters - ADS1115 #1 A2 0x48) -->
+        <div class="glass-card sensor-card sensor-mq3" data-sensor="2">
+          <div class="sensor-card-top">
+            <div class="sensor-identity">
+              <span class="sensor-tag">CH 03 • 0x48 A2</span>
+              <h3 class="sensor-name">MQ-3</h3>
+              <span class="sensor-gas-type">Alkohol & Esters • Fermentasi</span>
+            </div>
+            <label class="channel-toggle" title="Toggle Channel Visibility">
+              <input type="checkbox" id="chkSensor2" checked />
+              <span class="channel-check-dot"></span>
+            </label>
+          </div>
+          <div class="sensor-metric">
+            <span id="valSensor2" class="metric-number">0.00</span>
+            <span class="metric-unit">mV</span>
+          </div>
+          <div class="sensor-stats-footer">
+            <div class="stat-col"><span class="stat-k">Min</span><span id="minSensor2" class="stat-v">0</span></div>
+            <div class="stat-col"><span class="stat-k">Avg</span><span id="avgSensor2" class="stat-v">0</span></div>
+            <div class="stat-col"><span class="stat-k">Max</span><span id="maxSensor2" class="stat-v">0</span></div>
+          </div>
+        </div>
+
+        <!-- Sensor 4: MQ-7 (Carbon Monoxide & Smoke - ADS1115 #1 A3 0x48) -->
+        <div class="glass-card sensor-card sensor-mq7" data-sensor="3">
+          <div class="sensor-card-top">
+            <div class="sensor-identity">
+              <span class="sensor-tag">CH 04 • 0x48 A3</span>
+              <h3 class="sensor-name">MQ-7</h3>
+              <span class="sensor-gas-type">Karbon Monoksida • Asap Sangrai</span>
+            </div>
+            <label class="channel-toggle" title="Toggle Channel Visibility">
+              <input type="checkbox" id="chkSensor3" checked />
+              <span class="channel-check-dot"></span>
+            </label>
+          </div>
+          <div class="sensor-metric">
+            <span id="valSensor3" class="metric-number">0.00</span>
+            <span class="metric-unit">mV</span>
+          </div>
+          <div class="sensor-stats-footer">
+            <div class="stat-col"><span class="stat-k">Min</span><span id="minSensor3" class="stat-v">0</span></div>
+            <div class="stat-col"><span class="stat-k">Avg</span><span id="avgSensor3" class="stat-v">0</span></div>
+            <div class="stat-col"><span class="stat-k">Max</span><span id="maxSensor3" class="stat-v">0</span></div>
+          </div>
+        </div>
+
+        <!-- Sensor 5: TGS-2611 (Methane & Natural Gas - ADS1115 #2 A0 0x49) -->
+        <div class="glass-card sensor-card sensor-tgs2611" data-sensor="4">
+          <div class="sensor-card-top">
+            <div class="sensor-identity">
+              <span class="sensor-tag">CH 05 • 0x49 A0</span>
+              <h3 class="sensor-name">TGS-2611</h3>
+              <span class="sensor-gas-type">Metana • Gas Alam</span>
+            </div>
+            <label class="channel-toggle" title="Toggle Channel Visibility">
+              <input type="checkbox" id="chkSensor4" checked />
+              <span class="channel-check-dot"></span>
+            </label>
+          </div>
+          <div class="sensor-metric">
+            <span id="valSensor4" class="metric-number">0.00</span>
+            <span class="metric-unit">mV</span>
+          </div>
+          <div class="sensor-stats-footer">
+            <div class="stat-col"><span class="stat-k">Min</span><span id="minSensor4" class="stat-v">0</span></div>
+            <div class="stat-col"><span class="stat-k">Avg</span><span id="avgSensor4" class="stat-v">0</span></div>
+            <div class="stat-col"><span class="stat-k">Max</span><span id="maxSensor4" class="stat-v">0</span></div>
+          </div>
+        </div>
+
+        <!-- Sensor 6: TGS-2602 (VOCs, Ammonia & Odor - ADS1115 #2 A1 0x49) -->
+        <div class="glass-card sensor-card sensor-tgs2602" data-sensor="5">
+          <div class="sensor-card-top">
+            <div class="sensor-identity">
+              <span class="sensor-tag">CH 06 • 0x49 A1</span>
+              <h3 class="sensor-name">TGS-2602</h3>
+              <span class="sensor-gas-type">Pyrazines & Sulfida • Nutty</span>
+            </div>
+            <label class="channel-toggle" title="Toggle Channel Visibility">
+              <input type="checkbox" id="chkSensor5" checked />
+              <span class="channel-check-dot"></span>
+            </label>
+          </div>
+          <div class="sensor-metric">
+            <span id="valSensor5" class="metric-number">0.00</span>
+            <span class="metric-unit">mV</span>
+          </div>
+          <div class="sensor-stats-footer">
+            <div class="stat-col"><span class="stat-k">Min</span><span id="minSensor5" class="stat-v">0</span></div>
+            <div class="stat-col"><span class="stat-k">Avg</span><span id="avgSensor5" class="stat-v">0</span></div>
+            <div class="stat-col"><span class="stat-k">Max</span><span id="maxSensor5" class="stat-v">0</span></div>
+          </div>
+        </div>
+
+        <!-- Sensor 7: TGS-2600 (Air Contaminants & Hydrogen - ADS1115 #2 A2 0x49) -->
+        <div class="glass-card sensor-card sensor-tgs2600" data-sensor="6">
+          <div class="sensor-card-top">
+            <div class="sensor-identity">
+              <span class="sensor-tag">CH 07 • 0x49 A2</span>
+              <h3 class="sensor-name">TGS-2600</h3>
+              <span class="sensor-gas-type">Kontaminan Udara • Hidrogen</span>
+            </div>
+            <label class="channel-toggle" title="Toggle Channel Visibility">
+              <input type="checkbox" id="chkSensor6" checked />
+              <span class="channel-check-dot"></span>
+            </label>
+          </div>
+          <div class="sensor-metric">
+            <span id="valSensor6" class="metric-number">0.00</span>
+            <span class="metric-unit">mV</span>
+          </div>
+          <div class="sensor-stats-footer">
+            <div class="stat-col"><span class="stat-k">Min</span><span id="minSensor6" class="stat-v">0</span></div>
+            <div class="stat-col"><span class="stat-k">Avg</span><span id="avgSensor6" class="stat-v">0</span></div>
+            <div class="stat-col"><span class="stat-k">Max</span><span id="maxSensor6" class="stat-v">0</span></div>
+          </div>
+        </div>
+
+        <!-- Sensor 8: TGS-2620 (Organic Solvents & Vapors - ADS1115 #2 A3 0x49) -->
+        <div class="glass-card sensor-card sensor-tgs2620" data-sensor="7">
+          <div class="sensor-card-top">
+            <div class="sensor-identity">
+              <span class="sensor-tag">CH 08 • 0x49 A3</span>
+              <h3 class="sensor-name">TGS-2620</h3>
+              <span class="sensor-gas-type">Pelarut Organik • Uap Kopi</span>
+            </div>
+            <label class="channel-toggle" title="Toggle Channel Visibility">
+              <input type="checkbox" id="chkSensor7" checked />
+              <span class="channel-check-dot"></span>
+            </label>
+          </div>
+          <div class="sensor-metric">
+            <span id="valSensor7" class="metric-number">0.00</span>
+            <span class="metric-unit">mV</span>
+          </div>
+          <div class="sensor-stats-footer">
+            <div class="stat-col"><span class="stat-k">Min</span><span id="minSensor7" class="stat-v">0</span></div>
+            <div class="stat-col"><span class="stat-k">Avg</span><span id="avgSensor7" class="stat-v">0</span></div>
+            <div class="stat-col"><span class="stat-k">Max</span><span id="maxSensor7" class="stat-v">0</span></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Main Chart Card Container -->
+      <section class="glass-card chart-container-card">
+        <div class="chart-toolbar">
+          <div class="chart-toolbar-left">
+            <div class="chart-badge">
+              <span class="chart-badge-title">Robusta 8-Channel Aroma Curves</span>
+              <span class="chart-badge-axis">Tegangan Sensor (mV) vs Waktu Siklus SOP (1–300s)</span>
+            </div>
+          </div>
+
+          <div class="chart-legend-custom" id="customLegend">
+            <div class="legend-chip legend-chip-mq6" onclick="toggleDataset(0)" style="border-left: 3px solid #f97316;">
+              <span class="chip-color" style="background:#f97316;"></span>
+              <span class="chip-label">MQ-6</span>
+            </div>
+            <div class="legend-chip legend-chip-mq135" onclick="toggleDataset(1)" style="border-left: 3px solid #a855f7;">
+              <span class="chip-color" style="background:#a855f7;"></span>
+              <span class="chip-label">MQ-135</span>
+            </div>
+            <div class="legend-chip legend-chip-mq3" onclick="toggleDataset(2)" style="border-left: 3px solid #10b981;">
+              <span class="chip-color" style="background:#10b981;"></span>
+              <span class="chip-label">MQ-3</span>
+            </div>
+            <div class="legend-chip legend-chip-mq7" onclick="toggleDataset(3)" style="border-left: 3px solid #ef4444;">
+              <span class="chip-color" style="background:#ef4444;"></span>
+              <span class="chip-label">MQ-7</span>
+            </div>
+            <div class="legend-chip legend-chip-tgs2611" onclick="toggleDataset(4)" style="border-left: 3px solid #06b6d4;">
+              <span class="chip-color" style="background:#06b6d4;"></span>
+              <span class="chip-label">TGS-2611</span>
+            </div>
+            <div class="legend-chip legend-chip-tgs2602" onclick="toggleDataset(5)" style="border-left: 3px solid #00f5d4;">
+              <span class="chip-color" style="background:#00f5d4;"></span>
+              <span class="chip-label">TGS-2602</span>
+            </div>
+            <div class="legend-chip legend-chip-tgs2600" onclick="toggleDataset(6)" style="border-left: 3px solid #3b82f6;">
+              <span class="chip-color" style="background:#3b82f6;"></span>
+              <span class="chip-label">TGS-2600</span>
+            </div>
+            <div class="legend-chip legend-chip-tgs2620" onclick="toggleDataset(7)" style="border-left: 3px solid #ec4899;">
+              <span class="chip-color" style="background:#ec4899;"></span>
+              <span class="chip-label">TGS-2620</span>
+            </div>
+          </div>
+
+          <div class="chart-toolbar-right">
+            <div class="chart-window-selector">
+              <span class="window-label">Time Window:</span>
+              <button class="btn-window active" data-points="40">40s</button>
+              <button class="btn-window" data-points="80">80s</button>
+              <button class="btn-window" data-points="160">All (300s)</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Canvas Container -->
+        <div class="chart-wrapper">
+          <canvas id="sensorChart"></canvas>
+        </div>
+
+        <div class="chart-footer-info">
+          <div class="footer-note">
+            <span class="info-icon">☕</span>
+            <span>Headspace gas dibaca secara langsung oleh array 8 sensor gas. Baseline dikompensasi secara otomatis untuk uap kopi.</span>
+          </div>
+          <div class="footer-status-pill">
+            <span class="pill-dot"></span>
+            <span>Zero Lock Active</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- =========================================================
+           EDGE IMPULSE FEATURE EXPLORER & CLUSTER VISUALIZER
+           ========================================================= -->
+      <section class="glass-card feature-explorer-card" id="featureExplorerCard">
+        <div class="explorer-header">
+          <div class="explorer-title-box">
+            <div class="explorer-badge">
+              <span class="explorer-dot"></span>
+              <span class="explorer-brand">Edge Impulse Feature Explorer</span>
+              <span class="explorer-tag font-mono">2D Cluster Projection • Bank Sampel Kopi</span>
+            </div>
+            <h3 class="explorer-title">Persebaran Klaster Sampel Kopi & Posisi Real-Time</h3>
+            <p class="explorer-desc">Peta sebaran fitur 8 sensor gas dalam ruang klaster (Feature Space) berdasarkan kelas kopi yang dikumpulkan. Titik putih 🎯 menunjukkan posisi data sensor chamber saat ini.</p>
+          </div>
+
+          <div class="explorer-controls">
+            <div class="axis-selector-group">
+              <label for="clusterAxisSelect" class="axis-label">Sumbu Koordinat:</label>
+              <div class="custom-select-wrapper">
+                <select id="clusterAxisSelect" class="custom-select axis-select">
+                  <option value="mq3_mq7" selected>Sumbu X: MQ-3 (Alkohol/Fermentasi) vs Sumbu Y: MQ-7 (CO/Sangrai)</option>
+                  <option value="mq6_mq135">Sumbu X: MQ-6 (Hidrokarbon) vs Sumbu Y: MQ-135 (Amonia/Sulfida)</option>
+                  <option value="tgs2602_tgs2611">Sumbu X: TGS-2602 (VOC/Aroma Kopi) vs Sumbu Y: TGS-2611 (Metana)</option>
+                  <option value="tgs2600_tgs2620">Sumbu X: TGS-2600 (Kontaminan) vs Sumbu Y: TGS-2620 (Pelarut/Organik)</option>
+                </select>
+                <span class="select-arrow">▼</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="explorer-body">
+          <!-- Scatter Plot Canvas Container -->
+          <div class="explorer-chart-box">
+            <div class="explorer-canvas-wrapper">
+              <canvas id="clusterScatterChart"></canvas>
+            </div>
+            <div class="cluster-overlay-status" id="clusterCurrentStatus">
+              <div class="pulse-marker"></div>
+              <span id="clusterCurrentText">🎯 Posisi Sampel Saat Ini: Menunggu data sensor...</span>
+            </div>
+          </div>
+
+          <!-- Model Performance & Dynamic Classes Summary -->
+          <div class="explorer-metrics-sidebar">
+            <div class="metrics-panel-header">
+              <span class="metrics-panel-title">Model Status</span>
+              <span class="metrics-chip-acc" id="explorerModelStatusChip">Adaptive Softmax</span>
+            </div>
+
+            <div class="metrics-grid-mini">
+              <div class="m-card">
+                <span class="m-k">Arsitektur</span>
+                <span class="m-v text-cyan">8-Ch Softmax</span>
+              </div>
+              <div class="m-card">
+                <span class="m-k">Chip Latency</span>
+                <span class="m-v text-emerald">< 3 µs</span>
+              </div>
+              <div class="m-card">
+                <span class="m-k">Total Data</span>
+                <span class="m-v font-mono" id="explorerTotalSamples">0 Sampel</span>
+              </div>
+              <div class="m-card">
+                <span class="m-k">Kelas Kopi</span>
+                <span class="m-v text-violet font-mono" id="explorerTotalClasses">0 Jenis</span>
+              </div>
+            </div>
+
+            <!-- Dynamic Sample Bank Class Distribution -->
+            <div class="confusion-matrix-box">
+              <div class="cm-header-row">
+                <span class="cm-title">Distribusi Bank Sampel AI</span>
+                <span class="cm-badge" id="explorerBankBadge">Real Data</span>
+              </div>
+              <div id="clusterBankClassList" style="padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; font-size: 0.74rem;">
+                <div style="color: #64748b; font-style: italic;">Belum ada sampel tersimpan. Jalankan sampling atau uji cepat untuk menambahkan sampel kopi.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- =========================================================
+           HARDWARE DAQ & I2C MAPPING ARCHITECTURE (TIM 1 EDGE)
+           ========================================================= -->
+      <section class="glass-card daq-hardware-card" id="daqHardwareCard">
+        <div class="card-header" style="margin-bottom: 0;">
+          <div class="card-header-title">
+            <svg class="section-icon text-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
+              <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
+              <line x1="6" y1="6" x2="6.01" y2="6"></line>
+              <line x1="6" y1="18" x2="6.01" y2="18"></line>
+            </svg>
+            <span>Arsitektur Hardware DAQ, Sensor & I2C Bus (Seksi 1 & 3)</span>
+          </div>
+          <span class="badge-mini" style="background: rgba(56, 189, 248, 0.2); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4);">
+            ESP32-S3 • no_std + esp-hal
+          </span>
+        </div>
+
+        <div class="daq-grid">
+          <!-- ADS1115 #1 (0x48) -->
+          <div class="daq-subcard">
+            <div class="daq-subcard-title">
+              <span>ADS1115 #1 (Alamat I2C: 0x48)</span>
+              <span class="font-mono text-cyan" style="font-size: 0.7rem;">I2C SDA: GPIO 8 • SCL: GPIO 9</span>
+            </div>
+            <table class="daq-table">
+              <tbody>
+                <tr><td class="daq-pin">Pin A0</td><td class="daq-sensor">MQ-6</td><td class="daq-target">LPG, Butana, Hidrokarbon</td></tr>
+                <tr><td class="daq-pin">Pin A1</td><td class="daq-sensor">MQ-135</td><td class="daq-target">Air Quality, Furans, Karamelisasi</td></tr>
+                <tr><td class="daq-pin">Pin A2</td><td class="daq-sensor">MQ-3</td><td class="daq-target">Alkohol, Etanol, Uap Fermentasi</td></tr>
+                <tr><td class="daq-pin">Pin A3</td><td class="daq-sensor">MQ-7</td><td class="daq-target">Karbon Monoksida, Asap Sangrai</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- ADS1115 #2 (0x49) -->
+          <div class="daq-subcard">
+            <div class="daq-subcard-title">
+              <span>ADS1115 #2 (Alamat I2C: 0x49)</span>
+              <span class="font-mono text-cyan" style="font-size: 0.7rem;">I2C Clock: 400 kHz Fast-Mode</span>
+            </div>
+            <table class="daq-table">
+              <tbody>
+                <tr><td class="daq-pin">Pin A0</td><td class="daq-sensor">TGS-2611</td><td class="daq-target">Metana, Gas Alam</td></tr>
+                <tr><td class="daq-pin">Pin A1</td><td class="daq-sensor">TGS-2602</td><td class="daq-target">VOCs, Amonia, Bau Busuk/Odor</td></tr>
+                <tr><td class="daq-pin">Pin A2</td><td class="daq-sensor">TGS-2600</td><td class="daq-target">Kontaminan Udara, Hidrogen</td></tr>
+                <tr><td class="daq-pin">Pin A3</td><td class="daq-sensor">TGS-2620</td><td class="daq-target">Pelarut Organik, Uap Kopi</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Aktuator & Sensor Lingkungan -->
+        <div class="daq-grid" style="margin-top: 10px;">
+          <div class="daq-subcard">
+            <div class="daq-subcard-title">
+              <span>Sensor Lingkungan & Formula Konversi ADC</span>
+              <span class="font-mono text-amber" style="font-size: 0.7rem;">Suhu & RH</span>
+            </div>
+            <table class="daq-table">
+              <tbody>
+                <tr><td class="daq-pin">GPIO 10</td><td class="daq-sensor">DHT22 #1</td><td class="daq-target">Suhu & Kelembaban Udara Inlet</td></tr>
+                <tr><td class="daq-pin">GPIO 11</td><td class="daq-sensor">DHT22 #2</td><td class="daq-target">Suhu & Kelembaban Udara Exhaust</td></tr>
+                <tr><td class="daq-pin" colspan="3" style="color: #38bdf8;">Rumus ADC: <code>mV = raw × 6144 / 32767</code> (Gain ±6.144V)</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="daq-subcard">
+            <div class="daq-subcard-title">
+              <span>Indikator Status LED & UART Debug</span>
+              <span class="font-mono text-success" style="font-size: 0.7rem;">RMT SmartLED & Serial</span>
+            </div>
+            <table class="daq-table">
+              <tbody>
+                <tr><td class="daq-pin">GPIO 48 & GPIO 38</td><td class="daq-sensor">WS2812 RGB</td><td class="daq-target">Indikator Status Sampling & Wireless OTA</td></tr>
+                <tr><td class="daq-pin">GPIO 2</td><td class="daq-sensor">Status LED</td><td class="daq-target">Indikator Aktivitas Telemetri Real-Time</td></tr>
+                <tr><td class="daq-pin">GPIO 43 (TX) / 44 (RX)</td><td class="daq-sensor">UART0</td><td class="daq-target">115200 bps Debug Console</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- =========================================================
+       MODAL: DIGITAL RECEIPT / NOTA UJI MUTU KOPI ROBUSTA (PDF PREVIEW)
+       ========================================================= -->
+  <div class="modal-overlay" id="receiptModal">
+    <div class="modal-container">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <div class="modal-icon-badge">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M17 8h1a4 4 0 1 1 0 8h-1"></path>
+              <path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"></path>
+              <line x1="6" y1="2" x2="6" y2="4"></line>
+              <line x1="10" y1="2" x2="10" y2="4"></line>
+            </svg>
+          </div>
+          <div>
+            <h3 class="modal-title">Nota Digital Uji Mutu Kopi Robusta</h3>
+            <p class="modal-subtitle">Official Coffee Sensory Telemetry Slip • POS 80mm & A4 Report</p>
+          </div>
+        </div>
+        <button class="modal-close-btn" id="btnCloseModal">&times;</button>
+      </div>
+
+      <!-- Format Mode Selector -->
+      <div class="modal-format-bar">
+        <span class="format-label">Format Dokumen:</span>
+        <div class="format-options">
+          <button class="btn-format active" id="formatReceipt">
+            <span>Struk 80mm POS Slip</span>
+            <small>Gaya Nota Tokopedia / Tiket</small>
+          </button>
+          <button class="btn-format" id="formatA4">
+            <span>Standard A4 Sheet</span>
+            <small>Sertifikat Uji Laboratorium</small>
+          </button>
+        </div>
+      </div>
+
+      <!-- Live Receipt Preview Area (Target html2canvas & jsPDF) -->
+      <div class="receipt-preview-scroll">
+        <div class="receipt-paper" id="receiptPaper">
+          
+          <!-- Struk Cut Notch Top -->
+          <div class="receipt-notch-top"></div>
+
+          <!-- Struk Brand Header -->
+          <div class="receipt-header">
+            <div class="receipt-logo">ELECTRONIC NOSE</div>
+            <div class="receipt-subbrand">ROBUSTA COFFEE QUALITY & AROMA SLIP</div>
+            <div class="receipt-lab">Laboratorium Uji Sensorika & Instrumentasi Kopi</div>
+          </div>
+
+          <!-- Struk Dashed Line -->
+          <div class="receipt-dash">--------------------------------------------------</div>
+
+          <!-- Sesi & Sampel Kopi Metadata Table -->
+          <div class="receipt-meta-table">
+            <div class="receipt-row">
+              <span class="receipt-key">NO. LAPORAN / ID</span>
+              <span class="receipt-val font-mono" id="rcptRefId">COFFEE-ROB-2026-9481</span>
+            </div>
+            <div class="receipt-row">
+              <span class="receipt-key">TANGGAL & WAKTU</span>
+              <span class="receipt-val" id="rcptDateTime">2026-09-06 20:15:10 WIB</span>
+            </div>
+            <div class="receipt-row">
+              <span class="receipt-key">SAMPEL / PROFIL</span>
+              <span class="receipt-val font-bold" id="rcptCoffeeName">Robusta Dampit</span>
+            </div>
+            <div class="receipt-row">
+              <span class="receipt-key">ORIGIN / ASAL</span>
+              <span class="receipt-val" id="rcptOrigin">Robusta Dampit • Malang</span>
+            </div>
+            <div class="receipt-row">
+              <span class="receipt-key">ROAST LEVEL</span>
+              <span class="receipt-val" id="rcptRoast">Medium Roast</span>
+            </div>
+            <div class="receipt-row">
+              <span class="receipt-key">CHAMBER HEADSPACE</span>
+              <span class="receipt-val font-mono">40.5 °C | 46 %RH</span>
+            </div>
+            <div class="receipt-row">
+              <span class="receipt-key">PORT PERANGKAT</span>
+              <span class="receipt-val font-mono" id="rcptPort">COM5 • 115200 bps</span>
+            </div>
+            <div class="receipt-row">
+              <span class="receipt-key">DURASI EKSTRAKSI</span>
+              <span class="receipt-val" id="rcptDuration">00:02:40 • 160 s</span>
+            </div>
+          </div>
+
+          <div class="receipt-dash">--------------------------------------------------</div>
+          <div class="receipt-section-title">SIDIK JARI AROMA • SNAPSHOT GRAFIK</div>
+
+          <!-- Receipt Chart Image Snapshot Container -->
+          <div class="receipt-chart-frame">
+            <img id="receiptChartImg" alt="Snapshot Grafik Aroma Kopi E-Nose" src="" />
+          </div>
+
+          <div class="receipt-dash">--------------------------------------------------</div>
+          <div class="receipt-section-title">RESPON SENSOR VOLATIL KOPI • mV</div>
+
+          <!-- Receipt Data Table (Itemized List) -->
+          <table class="receipt-table">
+            <thead>
+              <tr>
+                <th class="text-left">SENSOR / SENYAWA</th>
+                <th class="text-right">MIN</th>
+                <th class="text-right">AVG</th>
+                <th class="text-right">PEAK</th>
+              </tr>
+            </thead>
+            <tbody id="receiptTableBody">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+
+          <div class="receipt-dash">--------------------------------------------------</div>
+
+          <!-- Coffee Quality Evaluation Box -->
+          <div class="receipt-security-box coffee-result-box">
+            <div class="receipt-row">
+              <span class="receipt-key">KLASIFIKASI AI</span>
+              <span class="receipt-val font-bold text-coffee" id="rcptResultPred">ROBUSTA DAMPIT</span>
+            </div>
+            <div class="receipt-row">
+              <span class="receipt-key">CATATAN SENSORIK</span>
+              <span class="receipt-val font-small" id="rcptResultNotes">Aroma pyrazine seimbang, bebas aroma cacat fermentasi</span>
+            </div>
+            <div class="receipt-row">
+              <span class="receipt-key">INTEGRITY HASH</span>
+              <span class="receipt-val font-mono" id="rcptHash">SHA256:7f4a...9b12</span>
+            </div>
+          </div>
+
+          <!-- Barcode simulation -->
+          <div class="receipt-barcode-wrap">
+            <div class="barcode-bars">||||| | |||| || |||||| | ||||| ||| |||| | |||||||| || |</div>
+            <div class="barcode-text font-mono" id="rcptBarcodeText">*COFFEE-ROB-2026-9481*</div>
+          </div>
+
+          <div class="receipt-dash">--------------------------------------------------</div>
+
+          <!-- Struk Footer -->
+          <div class="receipt-footer">
+            <p class="receipt-footer-title">Terima kasih atas pengujian di Robusta E-Nose Lab</p>
+            <p class="receipt-footer-sub">Nota digital ini sah sebagai bukti verifikasi spektrum aroma volatil kopi.</p>
+            <p class="receipt-footer-note">Generated by E-Nose Coffee Olfactory System • www.enose-coffee.local</p>
+          </div>
+
+          <!-- Struk Cut Notch Bottom -->
+          <div class="receipt-notch-bottom"></div>
+
+        </div>
+      </div>
+
+      <!-- Modal Footer Action Buttons -->
+      <div class="modal-actions">
+        <button class="btn btn-outline" id="btnCancelModal">Batal</button>
+        <button class="btn btn-primary-gradient btn-download-pdf" id="btnDownloadPDFNow">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          <span id="btnDownloadText">Unduh Nota Kopi (PDF)</span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- =========================================================
+       MODAL: EDGE TINYML TRAINING & EDGE IMPULSE COMPARISON STUDIO
+       ========================================================= -->
+  <div class="modal-backdrop" id="modalEdgeTinyMl" style="display: none;">
+    <div class="modal-dialog modal-glass modal-lg" style="max-width: 820px;">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <span class="modal-badge-icon" style="background: rgba(168, 85, 247, 0.2); border: 1px solid #a855f7; color: #c084fc;">⚡</span>
+          <div>
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <h3 class="modal-title">Edge TinyML Studio • Model Training & Evaluator</h3>
+              <span class="version-tag" style="background: rgba(16, 185, 129, 0.2); border-color: #10b981; color: #10b981;">Edge Impulse Compatible</span>
+            </div>
+            <p class="modal-subtitle">Training neural network MLP langsung pada data sensor E-Nose, hasilkan bobot ESP32 dan komparasi performa model.</p>
+          </div>
+        </div>
+        <button class="modal-close-btn" id="btnCloseTinyMlModal">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- Dataset Source Selector -->
+        <div class="tinyml-dataset-selection-card" style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; padding: 14px;">
+          <div class="dataset-source-header" style="margin-bottom: 10px;">
+            <span class="dataset-source-title font-bold" style="font-size: 0.85rem; color: #f1f5f9;">Pilih Sumber Dataset Training:</span>
+          </div>
+          <div class="dataset-source-options" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <label class="dataset-radio-label" style="background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(0, 245, 212, 0.4); border-radius: 8px; padding: 10px; cursor: pointer; display: flex; gap: 10px; align-items: flex-start;">
+              <input type="radio" name="trainDatasetSource" id="radioSamplingData" value="sampling" checked style="margin-top: 3px;" />
+              <div class="dataset-radio-content">
+                <span class="dataset-radio-title font-bold" style="display: block; font-size: 0.8rem; color: #00f5d4;">📊 Data Sesi Sampling 300s Terakhir (JSON)</span>
+                <span class="dataset-radio-desc font-small text-muted" id="samplingDatasetDesc" style="font-size: 0.72rem;">Terekam data spektrum VOC Robusta format resmi Edge Impulse</span>
+              </div>
+            </label>
+            <label class="dataset-radio-label" style="background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 10px; cursor: pointer; display: flex; gap: 10px; align-items: flex-start;">
+              <input type="radio" name="trainDatasetSource" id="radioCsvData" value="csv" style="margin-top: 3px;" />
+              <div class="dataset-radio-content">
+                <span class="dataset-radio-title font-bold" style="display: block; font-size: 0.8rem; color: #e2e8f0;">📁 Upload Dataset (JSON / CSV)</span>
+                <span class="dataset-radio-desc font-small text-muted" style="font-size: 0.72rem;">Pilih file JSON Edge Impulse atau CSV dataset Robusta</span>
+              </div>
+            </label>
+          </div>
+
+          <!-- File Input for JSON / CSV (Muncul jika pilih opsi upload) -->
+          <div id="csvUploadWrapper" style="display: none; margin-top: 12px; padding: 10px; background: rgba(0, 0, 0, 0.3); border-radius: 8px; border: 1px dashed rgba(0, 245, 212, 0.3);">
+            <input type="file" id="csvTrainingFileInput" accept=".json,.csv" class="form-control" style="background: rgba(15, 23, 42, 0.6); padding: 8px; width: 100%; font-size: 0.8rem; color: #00f5d4;" />
+            <span class="file-hint font-small text-muted" id="csvFileHint" style="display: block; margin-top: 6px; font-size: 0.72rem;">Mendukung format resmi <b>.json</b> Edge Impulse (MQ7, MQ3, MQ8) & file <b>.csv</b>.</span>
+          </div>
+
+          <!-- Quick Actions: Download Dataset JSON Resmi & Folder Access -->
+          <div style="margin-top: 10px; display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap;">
+            <button type="button" class="btn btn-outline" id="btnDownloadSamplingDatasetJson" style="font-size: 0.74rem; padding: 5px 12px; border-color: rgba(0, 245, 212, 0.5); color: #00f5d4; font-weight: 600;" title="Unduh file JSON hasil sampling chamber fisik Anda">
+              <svg class="btn-icon text-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+              </svg>
+              <span>🧪 1. Unduh Sesi Terakhir (JSON)</span>
+            </button>
+            <button type="button" class="btn btn-emerald" id="btnDownloadBankDatasetJson" style="font-size: 0.74rem; padding: 5px 12px; box-shadow: 0 0 10px rgba(168, 85, 247, 0.35); font-weight: 600; border-color: #a855f7; background: rgba(168, 85, 247, 0.2); color: #c084fc;" title="Unduh seluruh data Bank Sampel yang telah tersimpan">
+              <svg class="btn-icon text-violet" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+              <span>📦 2. Unduh Bank Sampel (.JSON)</span>
+            </button>
+            <button type="button" class="btn btn-outline" id="btnOpenDatasetFolder" style="font-size: 0.74rem; padding: 5px 12px; border-color: rgba(255, 255, 255, 0.2); color: #e2e8f0;" title="Buka folder dataset di Windows File Explorer">
+              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+              </svg>
+              <span>📂 Buka Folder Dataset</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Edge Impulse Cloud Sync API Key (Project 827201) -->
+        <div class="ei-api-key-box" style="margin-top: 12px; padding: 12px 14px; background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 8px; display: flex; flex-direction: column; gap: 8px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 1.1rem;">🔑</span>
+              <div>
+                <div style="font-size: 0.8rem; font-weight: 600; color: #f1f5f9;">Edge Impulse Cloud API Key (Project 827201):</div>
+                <div style="font-size: 0.68rem; color: #94a3b8;">Klik salin 📋 di sebelah <code>Edge Impulse Studio (FebriFrmansyah)</code> pada layar Anda lalu tempel di sini</div>
+              </div>
+            </div>
+            <div style="display: flex; gap: 6px; flex: 1; min-width: 260px;">
+              <input type="password" id="edgeImpulseApiKeyInput" class="form-control" placeholder="ei_6c56... (paste API Key di sini)" style="background: #080d1a; border: 1px solid #334155; color: #00f5d4; font-family: monospace; font-size: 0.76rem; padding: 5px 8px; border-radius: 6px; flex: 1;" />
+              <button type="button" id="btnSaveEiApiKey" class="btn btn-outline" style="font-size: 0.74rem; padding: 4px 12px; border-color: rgba(0, 245, 212, 0.4); color: #00f5d4;">Simpan</button>
+            </div>
+          </div>
+
+          <!-- Tombol Cloud Upload Otomatis: Sinkron Bank Sampel ke Edge Impulse -->
+          <div style="display: flex; justify-content: flex-end; gap: 8px; align-items: center; margin-top: 4px; padding-top: 8px; border-top: 1px solid rgba(255, 255, 255, 0.06); flex-wrap: wrap;">
+            <span style="font-size: 0.72rem; color: #cbd5e1;">Otomatis: Unggah data Bank Sampel ke Cloud Edge Impulse:</span>
+            <button type="button" class="btn btn-emerald" id="btnCloudSyncBankJson" style="font-size: 0.75rem; padding: 5px 14px; box-shadow: 0 0 12px rgba(16, 185, 129, 0.35); font-weight: 600;">
+              <span>☁️ Auto Upload Bank Sampel ke Edge Impulse Cloud</span>
+            </button>
+          </div>
+
+          <!-- Progress Bar Cloud Upload -->
+          <div id="cloudUploadProgressBox" style="display: none; width: 100%; margin-top: 6px;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.72rem; color: #00f5d4; margin-bottom: 3px;">
+              <span id="cloudUploadStatusText">Mengunggah ke Edge Impulse...</span>
+              <span id="cloudUploadPercent">0%</span>
+            </div>
+            <div style="height: 6px; background: rgba(255, 255, 255, 0.1); border-radius: 4px; overflow: hidden;">
+              <div id="cloudUploadBar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #10b981, #00f5d4); transition: width 0.1s ease;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tombol Utama Train Data with Edge Impulse -->
+        <div class="train-action-box" style="margin-top: 16px; text-align: center;">
+          <button type="button" class="btn btn-primary-gradient btn-lg btn-train-tinyml" id="btnExecuteTraining" style="padding: 12px 28px; font-size: 0.92rem; font-weight: 700; border-radius: 24px; box-shadow: 0 0 20px rgba(0, 245, 212, 0.35);">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path>
+            </svg>
+            <span id="btnExecuteTrainingText">🚀 1-Click Training with Edge Impulse</span>
+          </button>
+        </div>
+
+        <!-- Training Progress Animation & Terminal (Hidden by default, shown during training) -->
+        <div class="training-in-progress-box" id="trainingProgressBox" style="display: none; margin-top: 16px; background: rgba(10, 15, 26, 0.85); border: 1px solid rgba(168, 85, 247, 0.4); border-radius: 10px; padding: 14px;">
+          <div class="training-header-indicator" style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+            <div class="pulse-marker" style="background: #a855f7; box-shadow: 0 0 12px #a855f7;"></div>
+            <span class="training-pulse-text font-bold" id="trainingStatusHeader" style="color: #c084fc; font-size: 0.9rem;">Training data with Edge TinyML...</span>
+          </div>
+          <div class="tinyml-prog-track" style="height: 10px; background: rgba(255, 255, 255, 0.1); border-radius: 6px; overflow: hidden; margin-bottom: 8px;">
+            <div class="tinyml-prog-bar" id="trainingEpochProgress" style="width: 0%; height: 100%; background: linear-gradient(90deg, #a855f7, #00f5d4); transition: width 0.15s ease;"></div>
+          </div>
+          <div class="training-metrics-live font-mono" style="display: flex; justify-content: space-between; font-size: 0.75rem; color: #94a3b8; margin-bottom: 10px;">
+            <span id="liveEpochText">Epoch: 0/30</span>
+            <span id="liveLossText" style="color: #f59e0b;">Loss: --</span>
+            <span id="liveAccText" style="color: #10b981;">Accuracy: --%</span>
+          </div>
+          <!-- Terminal Code Log -->
+          <div class="training-console-log font-mono" id="trainingConsoleLog" style="background: #050811; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 6px; padding: 10px; font-size: 0.72rem; color: #38bdf8; max-height: 120px; overflow-y: auto; line-height: 1.5;">
+            <div>[INIT] Initializing 8-Channel TinyML Feature Extractor (MQ-6, MQ-135, MQ-3, MQ-7, TGS-2611, TGS-2602, TGS-2600, TGS-2620)...</div>
+          </div>
+        </div>
+
+        <!-- Results Card (Edge Impulse Style Performance & Model Summary) -->
+        <div class="edge-impulse-results-card" id="edgeImpulseResultsCard" style="display: none; margin-top: 20px; background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(0, 245, 212, 0.4); border-radius: 12px; padding: 16px;">
+          <div class="ei-results-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); padding-bottom: 10px;">
+            <div class="ei-brand-group">
+              <span class="explorer-badge" style="font-size: 0.72rem; margin-bottom: 4px;">Edge Impulse Model Evaluation</span>
+              <h4 class="ei-results-title font-bold" style="color: #f8fafc; margin: 0; font-size: 1rem;">Hasil Pelatihan Model TinyML Selesai</h4>
+            </div>
+            <div class="ei-score-badges" style="display: flex; gap: 8px; align-items: center;">
+              <div class="metrics-chip-acc" id="eiFinalAccuracy" style="font-size: 0.88rem; padding: 4px 12px;">94.2% ACCURACY</div>
+              <div class="font-mono font-small text-amber" id="eiFinalLoss" style="background: rgba(245, 158, 11, 0.15); padding: 4px 8px; border-radius: 8px; border: 1px solid rgba(245, 158, 11, 0.3);">Loss: 0.082</div>
+            </div>
+          </div>
+
+          <!-- Metrics Mini Grid (Edge Impulse Format) -->
+          <div class="ei-metrics-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px;">
+            <div class="m-card">
+              <span class="m-k">On-Device Latency</span>
+              <span class="m-v text-cyan font-mono" id="eiLatencyVal">< 3 µs</span>
+              <span style="font-size: 0.65rem; color: #64748b;">ESP32-S3 @ 240MHz</span>
+            </div>
+            <div class="m-card">
+              <span class="m-k">Stack RAM Usage</span>
+              <span class="m-v text-emerald font-mono" id="eiRamVal">148 Bytes</span>
+              <span style="font-size: 0.65rem; color: #64748b;">Zero Heap Allocation</span>
+            </div>
+            <div class="m-card">
+              <span class="m-k">Flash ROM Size</span>
+              <span class="m-v text-amber font-mono" id="eiRomVal">4.2 KB</span>
+              <span style="font-size: 0.65rem; color: #64748b;">Quantized Weights</span>
+            </div>
+            <div class="m-card">
+              <span class="m-k">Total Sampel</span>
+              <span class="m-v font-mono" id="eiDatasetSamplesVal">0</span>
+              <span style="font-size: 0.65rem; color: #64748b;" id="eiClassesSubtitle">Bank Sampel Chamber</span>
+            </div>
+          </div>
+
+          <!-- Dynamic Classes Performance / Separation Table -->
+          <div class="confusion-matrix-box" style="margin-top: 10px;">
+            <div class="cm-header-row">
+              <span class="cm-title">Evaluasi Separabilitas Profil Kopi</span>
+              <span class="cm-badge font-mono" id="eiCmScoreBadge">F1: 0.94 • Softmax Distance</span>
+            </div>
+            <div id="eiDynamicClassesSummary" style="padding: 10px 14px; font-size: 0.74rem;">
+              <table class="cm-table" id="eiCmTable">
+                <thead>
+                  <tr><th>Kelas Kopi</th><th>Sampel</th><th>Centroid Dist</th><th>Conf Rata-Rata</th><th>Status</th></tr>
+                </thead>
+                <tbody id="eiCmTableBody">
+                  <tr><td colspan="5" style="text-align: center; color: #64748b;">Model siap dilatih dari data Bank Sampel</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-actions" id="eiModalActions" style="display: none; margin-top: 14px; padding: 14px 20px; border-top: 1px solid rgba(255, 255, 255, 0.08); justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+        <button type="button" class="btn btn-outline" id="btnExportEiPdf">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+          </svg>
+          <span>Export Edge Impulse Report (PDF)</span>
+        </button>
+        <button type="button" class="btn btn-outline" id="btnDownloadWeightsJson">
+          <svg class="btn-icon text-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          <span>Download Weights (.json/.rs)</span>
+        </button>
+        <button type="button" class="btn btn-primary-gradient" id="btnDeployModelToEsp32">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+          <span>Simpan & Terapkan Model ke ESP32</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification System -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- Application Logic -->
+  <script src="dataset/cluster_data.js?v=3.4"></script>
+  <script src="script.js?v=4.0_azure_ota_fixed"></script>
+</body>
+</html>

@@ -487,8 +487,10 @@ Simpan seluruh konfigurasi sensitif di variabel lingkungan (`.env` yang telah di
 ## 👥 Team Responsibility
 
 * **Team 1 — Edge & Embedded AI:**
+  Febri Firmansyah and Rahma Putra Prasetya Responsible for
   * Perancangan perangkat keras E-Nose, akuisisi 2× ADS1115 & 2× DHT22, kontrol pneumatik, firmware Rust `no_std` pada ESP32-S3, ekstraksi fitur, deployment model TinyML, indikator RGB LED, pembaruan firmware OTA, serta antarmuka telemetri IoT ke Cloud.
 * **Team 2 — Cloud & Dashboard Application:**
+  Imelda Lutfi K, Naufaliano Saputra Responsible for
   * Integrasi layanan Microsoft Azure, penyimpanan basis data *time-series*, pemrosesan sisi *cloud*, serta visualisasi antarmuka *dashboard* pemantauan *real-time*.
 
 ---

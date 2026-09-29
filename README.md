@@ -471,26 +471,13 @@ python tools/test_tinyml_cli.py
 
 ---
 
-## 🔐 Security Guidelines
-
-**JANGAN PERNAH melakukan commit kredensial rahasia ke repositori GitHub publik:**
-
-* Password Wi-Fi / Hotspot pribadi
-* Microsoft Azure Shared Access Signature (SAS) / Connection String
-* Token akses ThingsBoard / MQTT Broker password
-* Sertifikat atau *private key*
-
-Simpan seluruh konfigurasi sensitif di variabel lingkungan (`.env` yang telah diabaikan oleh `.gitignore`) dan hanya sediakan template `.env.example`.
-
----
-
 ## 👥 Team Responsibility
 
 * **Team 1 — Edge & Embedded AI:**
-  Febri Firmansyah and Rahma Putra Prasetya Responsible for
+  Febri Firmansyah and Rahma Putra Prasetya is Responsible for
   * Perancangan perangkat keras E-Nose, akuisisi 2× ADS1115 & 2× DHT22, kontrol pneumatik, firmware Rust `no_std` pada ESP32-S3, ekstraksi fitur, deployment model TinyML, indikator RGB LED, pembaruan firmware OTA, serta antarmuka telemetri IoT ke Cloud.
 * **Team 2 — Cloud & Dashboard Application:**
-  Imelda Lutfi K, Naufaliano Saputra Responsible for
+  Imelda Lutfi K, Naufaliano Saputra is Responsible for
   * Integrasi layanan Microsoft Azure, penyimpanan basis data *time-series*, pemrosesan sisi *cloud*, serta visualisasi antarmuka *dashboard* pemantauan *real-time*.
 
 ---

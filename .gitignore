@@ -15,8 +15,6 @@ __pycache__/
 **/__pycache__/
 *.pyc
 
-# Temporary reports / local notes
-LAPORAN SEMENTARA/
 
 # OS & Editor files
 .DS_Store

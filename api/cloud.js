@@ -111,39 +111,64 @@ module.exports = async (req, res) => {
         });
       }
 
-      // Ambil dokumen relay telemetri dari Azure Cosmos DB (tanpa menyentuh ThingsBoard Device Token agar ThingsBoard tidak Active palsu)
-      const dateUtc = new Date().toUTCString();
-      const resourceId = `dbs/${COSMOS_DB}/colls/${COSMOS_COLL}/docs/LIVE-ESP32-RELAY`;
-      const auth = getCosmosAuthToken('get', 'docs', resourceId, dateUtc);
-
-      const cosmosRes = await httpRequest({
+      // 1. Ambil telemetri live langsung dari ThingsBoard Cloud (Jalur Utama Lintas Hotspot & Vercel)
+      const tbRes = await httpRequest({
         protocol: 'https:',
-        hostname: COSMOS_HOST,
+        hostname: TB_HOST,
         port: 443,
-        path: `/${resourceId}`,
-        method: 'GET',
-        headers: {
-          'Authorization': auth,
-          'x-ms-date': dateUtc,
-          'x-ms-version': '2018-12-31',
-          'x-ms-documentdb-partitionkey': JSON.stringify(['RELAY'])
-        }
-      }).catch(() => ({ status: 404, json: null }));
+        path: `/api/v1/${TB_TOKEN}/attributes?clientKeys=live_telemetry,status,fw_version`,
+        method: 'GET'
+      }).catch(() => null);
 
-      const relayDoc = (cosmosRes && cosmosRes.status === 200 && cosmosRes.json) ? cosmosRes.json : null;
-      const nowSec = Math.floor(Date.now() / 1000);
-      const docTsSec = relayDoc?._ts || 0;
-      const isEspActive = docTsSec > 0 && (nowSec - docTsSec <= 10);
+      let clientAttrs = tbRes?.json?.client || {};
+      let liveTelemetry = clientAttrs.live_telemetry || null;
+      let fwVer = clientAttrs.fw_version || '1.2.0';
+      let isEspActive = false;
+
+      if (liveTelemetry && liveTelemetry.sensors) {
+        isEspActive = true;
+        if (liveTelemetry.firmware_version) {
+          fwVer = liveTelemetry.firmware_version;
+        }
+      }
+
+      // 2. Fallback jika ThingsBoard tidak ada tapi Azure Cosmos DB tersedia
+      if (!isEspActive && COSMOS_KEY) {
+        const dateUtc = new Date().toUTCString();
+        const resourceId = `dbs/${COSMOS_DB}/colls/${COSMOS_COLL}/docs/LIVE-ESP32-RELAY`;
+        const auth = getCosmosAuthToken('get', 'docs', resourceId, dateUtc);
+
+        const cosmosRes = await httpRequest({
+          protocol: 'https:',
+          hostname: COSMOS_HOST,
+          port: 443,
+          path: `/${resourceId}`,
+          method: 'GET',
+          headers: {
+            'Authorization': auth,
+            'x-ms-date': dateUtc,
+            'x-ms-version': '2018-12-31',
+            'x-ms-documentdb-partitionkey': JSON.stringify(['RELAY'])
+          }
+        }).catch(() => ({ status: 404, json: null }));
+
+        const relayDoc = (cosmosRes && cosmosRes.status === 200 && cosmosRes.json) ? cosmosRes.json : null;
+        const nowSec = Math.floor(Date.now() / 1000);
+        const docTsSec = relayDoc?._ts || 0;
+        if (docTsSec > 0 && (nowSec - docTsSec <= 15)) {
+          isEspActive = true;
+          liveTelemetry = relayDoc.live_telemetry || liveTelemetry;
+          fwVer = relayDoc.fw_version || fwVer;
+        }
+      }
 
       return res.status(200).json({
         success: true,
         connected: true,
         esp_connected: isEspActive,
-        database: COSMOS_DB,
-        container: COSMOS_COLL,
-        mode: 'azure_cosmos_cloud',
-        live_telemetry: isEspActive ? (relayDoc?.live_telemetry || null) : null,
-        fw_version: relayDoc?.fw_version || '1.0.8',
+        mode: isEspActive ? 'thingsboard_cloud_relay' : 'standby',
+        live_telemetry: liveTelemetry,
+        fw_version: fwVer,
         status: isEspActive ? 'ONLINE' : 'OFFLINE',
         timestamp: new Date().toISOString()
       });
@@ -181,21 +206,66 @@ module.exports = async (req, res) => {
         });
       }
 
-      // 1. Kirim Command Lintas Hotspot ke ESP32 via Azure Cosmos DB Relay (Tanpa menyentuh ThingsBoard)
-      if (action === 'command') {
-        const cmd = body.command || 'START';
-        const seq = Math.floor(Date.now() / 1000) % 1000000;
-        await upsertCosmosDoc({
-          id: 'LIVE-ESP32-CMD',
-          coffee_id: 'RELAY',
-          cloud_cmd: cmd,
-          cmd_seq: seq,
-          updated_at: new Date().toISOString()
+      // 0b. Reset OTA status ke IDLE di ThingsBoard Cloud
+      if (action === 'ota_reset') {
+        const tbPayload = JSON.stringify({
+          cloud_cmd: 'IDLE',
+          ota_trigger: false
         });
+        await httpRequest({
+          protocol: 'https:',
+          hostname: TB_HOST,
+          port: 443,
+          path: `/api/v1/${TB_TOKEN}/attributes`,
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(tbPayload)
+          }
+        }, tbPayload).catch(() => null);
 
         return res.status(200).json({
           success: true,
-          message: `Perintah '${cmd}' dikirim ke antrean Azure Cloud!`
+          message: 'Status OTA di-reset ke IDLE'
+        });
+      }
+
+      // 1. Kirim Command (START, STOP, PURGE) ke ESP32 via ThingsBoard Cloud
+      if (action === 'command') {
+        const cmd = (body.command || 'START').toUpperCase();
+        const seq = Math.floor(Date.now() / 1000) % 2000000000;
+
+        const tbPayload = JSON.stringify({
+          cloud_cmd: cmd,
+          cmd_seq: seq
+        });
+
+        await httpRequest({
+          protocol: 'https:',
+          hostname: TB_HOST,
+          port: 443,
+          path: `/api/v1/${TB_TOKEN}/attributes`,
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(tbPayload)
+          }
+        }, tbPayload).catch(() => null);
+
+        if (COSMOS_KEY) {
+          await upsertCosmosDoc({
+            id: 'LIVE-ESP32-CMD',
+            coffee_id: 'RELAY',
+            cloud_cmd: cmd,
+            cmd_seq: seq,
+            updated_at: new Date().toISOString()
+          }).catch(() => null);
+        }
+
+        return res.status(200).json({
+          success: true,
+          cmd_seq: seq,
+          message: `Perintah '${cmd}' dikirim ke ThingsBoard Cloud & ESP32!`
         });
       }
 

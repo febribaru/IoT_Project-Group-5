@@ -331,14 +331,22 @@ async function checkEspHardwareStatus() {
       const cloudRes = await fetch('/api/cloud').catch(() => null);
       if (cloudRes && cloudRes.ok) {
         const cloudData = await cloudRes.json();
+        const lt = cloudData.live_telemetry || {};
+        const s = lt.sensors || {};
+        const st = lt.status || {};
         data = {
           esp_connected: !!cloudData.esp_connected,
           port: 'IoT Nirkabel (Wi-Fi / Cloud)',
           connection_mode: 'wireless_iot',
           wifi_ssid: 'Wi-Fi IoT Cloud',
-          wifi_ip: 'Cloud Relay',
+          wifi_ip: 'ThingsBoard Cloud Relay',
           rgb_led: cloudData.esp_connected ? '🟢 Aktif (IoT Nirkabel)' : '🔴 Offline (Perangkat Mati / Tercabut)',
-          active_firmware_version: cloudData.fw_version || '1.0.8'
+          active_firmware_version: cloudData.fw_version || st.firmware_version || '1.2.0',
+          dht1_temp: typeof s.dht1_temp === 'number' ? s.dht1_temp : 0,
+          dht1_hum: typeof s.dht1_hum === 'number' ? s.dht1_hum : 0,
+          dht2_temp: typeof s.dht2_temp === 'number' ? s.dht2_temp : 0,
+          dht2_hum: typeof s.dht2_hum === 'number' ? s.dht2_hum : 0,
+          raw_port: 'IoT Nirkabel'
         };
       }
     }
@@ -3084,7 +3092,84 @@ function setDeviceConnection(connect, isUnplugged = false) {
 const offlineTelemetryBuffer = [];
 let offlineReconnectTimer = null;
 
+function startCloudRelayStream() {
+  updateStatusBadge('connected', '☁️ ThingsBoard Cloud Relay Terhubung (Siap Sampling)');
+  showToast('Terhubung via ThingsBoard Cloud Relay (IoT Nirkabel)', 'success');
+
+  if (state.streamInterval) {
+    clearInterval(state.streamInterval);
+    state.streamInterval = null;
+  }
+
+  const pollCloud = async () => {
+    if (!state.isConnected) return;
+    try {
+      const cloudRes = await fetch('/api/cloud').catch(() => null);
+      if (cloudRes && cloudRes.ok) {
+        const cloudJson = await cloudRes.json();
+        if (cloudJson && cloudJson.live_telemetry && cloudJson.live_telemetry.sensors) {
+          const lt = cloudJson.live_telemetry;
+          const s = lt.sensors || {};
+          const st = lt.status || {};
+          const dht1 = (lt.dht1 && typeof lt.dht1 === 'object') ? lt.dht1 : null;
+          const dht2 = (lt.dht2 && typeof lt.dht2 === 'object') ? lt.dht2 : null;
+          const d1t = dht1 ? dht1.temp : (s.dht1_temp ?? lt.temperature ?? 0);
+          const d1h = dht1 ? dht1.hum : (s.dht1_hum ?? lt.humidity ?? 0);
+          const d2t = dht2 ? dht2.temp : (s.dht2_temp ?? d1t);
+          const d2h = dht2 ? dht2.hum : (s.dht2_hum ?? d1h);
+          handleRustTelemetryPacket({
+            sensor_data: {
+              timestamp: new Date().toISOString().slice(0, 19).replace('T', ' '),
+              time_sec: Number(st.elapsed_time || 0) % 300,
+              firmware_version: st.firmware_version || cloudJson.fw_version || '1.2.0',
+              active_firmware_version: st.firmware_version || cloudJson.fw_version || '1.2.0',
+              mq6: Number(s.mq6 || 0),
+              mq135: Number(s.mq135 || 0),
+              mq3: Number(s.mq3 || 0),
+              mq7: Number(s.mq7 || 0),
+              tgs2611: Number(s.tgs2611 || 0),
+              tgs2602: Number(s.tgs2602 || 0),
+              tgs2600: Number(s.tgs2600 || 0),
+              tgs2620: Number(s.tgs2620 || 0),
+              dht1_temp: Number(d1t || 0),
+              dht1_hum: Number(d1h || 0),
+              dht2_temp: Number(d2t || 0),
+              dht2_hum: Number(d2h || 0),
+              cloud_payload: lt
+            },
+            tinyml: lt.tinyml || null
+          });
+          if (!state.isSampling) {
+            updateStatusBadge('connected', `☁️ Cloud Relay Terhubung (Lintas Hotspot • v${st.firmware_version || cloudJson.fw_version || '1.2.0'})`);
+          }
+          return;
+        }
+      }
+    } catch (_) {}
+
+    if (state.isSampling) {
+      const dummy = generateDummyCoffeePacket();
+      if (offlineTelemetryBuffer.length < 500) {
+        offlineTelemetryBuffer.push(dummy);
+      }
+      updateStatusBadge('idle', `📦 Offline Buffer: ${offlineTelemetryBuffer.length} paket`);
+    }
+  };
+
+  pollCloud();
+  state.streamInterval = setInterval(pollCloud, Math.max(1200, state.samplingRateMs));
+}
+
 function connectWebSocketBackend() {
+  const isHttps = typeof window !== 'undefined' && window.location && window.location.protocol === 'https:';
+  if (isHttps) {
+    // Pada origin HTTPS (seperti https://iotproject-kappa.vercel.app/), browser melarang
+    // koneksi WebSocket ws:// tidak aman (Mixed Content SecurityError).
+    // Gunakan Cloud Relay Poller (/api/cloud) yang langsung membaca telemetri ThingsBoard.
+    startCloudRelayStream();
+    return;
+  }
+
   const wsUrl = getWsUrl();
   showToast(`Menghubungkan ke Backend Rust (${wsUrl})...`, 'info');
   updateStatusBadge('idle', 'Menghubungkan Jalur Data ke Server...');
@@ -3174,16 +3259,16 @@ function connectWebSocketBackend() {
                     const st = lt.status || {};
                     const dht1 = (lt.dht1 && typeof lt.dht1 === 'object') ? lt.dht1 : null;
                     const dht2 = (lt.dht2 && typeof lt.dht2 === 'object') ? lt.dht2 : null;
-                    const d1t = dht1 ? dht1.temp : (lt.dht1_temp ?? lt.temperature ?? 0);
-                    const d1h = dht1 ? dht1.hum : (lt.dht1_hum ?? lt.humidity ?? 0);
-                    const d2t = dht2 ? dht2.temp : (lt.dht2_temp ?? d1t);
-                    const d2h = dht2 ? dht2.hum : (lt.dht2_hum ?? d1h);
+                    const d1t = dht1 ? dht1.temp : (s.dht1_temp ?? lt.temperature ?? 0);
+                    const d1h = dht1 ? dht1.hum : (s.dht1_hum ?? lt.humidity ?? 0);
+                    const d2t = dht2 ? dht2.temp : (s.dht2_temp ?? d1t);
+                    const d2h = dht2 ? dht2.hum : (s.dht2_hum ?? d1h);
                     handleRustTelemetryPacket({
                       sensor_data: {
                         timestamp: new Date().toISOString().slice(0, 19).replace('T', ' '),
                         time_sec: Number(st.elapsed_time || 0) % 300,
-                        firmware_version: st.firmware_version || cloudJson.fw_version || '1.0.8',
-                        active_firmware_version: st.firmware_version || cloudJson.fw_version || '1.0.8',
+                        firmware_version: st.firmware_version || cloudJson.fw_version || '1.2.0',
+                        active_firmware_version: st.firmware_version || cloudJson.fw_version || '1.2.0',
                         mq6: Number(s.mq6 || 0),
                         mq135: Number(s.mq135 || 0),
                         mq3: Number(s.mq3 || 0),
@@ -3201,7 +3286,7 @@ function connectWebSocketBackend() {
                       tinyml: lt.tinyml || null
                     });
                     if (!state.isSampling) {
-                      updateStatusBadge('connected', `☁️ Cloud Relay Terhubung (Lintas Hotspot • v${st.firmware_version || cloudJson.fw_version || '1.0.8'})`);
+                      updateStatusBadge('connected', `☁️ Cloud Relay Terhubung (Lintas Hotspot • v${st.firmware_version || cloudJson.fw_version || '1.2.0'})`);
                     }
                     return;
                   }
@@ -3222,8 +3307,8 @@ function connectWebSocketBackend() {
     };
 
   } catch (err) {
-    console.error('Inisialisasi WebSocket gagal:', err);
-    startLocalSimulation();
+    console.warn('Inisialisasi WebSocket gagal, beralih ke Cloud Relay Poller:', err);
+    startCloudRelayStream();
   }
 }
 

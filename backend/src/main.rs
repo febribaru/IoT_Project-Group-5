@@ -52,8 +52,25 @@ fn main() {
 
         tokio::spawn(bridge::run_hardware_or_sim_worker(bridge_state.clone()));
 
+        tokio::spawn(bridge::run_thingsboard_sync_worker(bridge_state.clone()));
+
         // 4. Bangun Router Axum
         let app = bridge::create_router(bridge_state);
+
+        // 4b. Jalankan Built-in Azure Cosmos DB Bridge pada port 5005 (menggantikan cosmos_bridge.py otomatis)
+        let app_cosmos = app.clone();
+        tokio::spawn(async move {
+            let cosmos_addr = SocketAddr::from(([127, 0, 0, 1], 5005));
+            match tokio::net::TcpListener::bind(cosmos_addr).await {
+                Ok(cosmos_listener) => {
+                    tracing::info!("☁️ [COSMOS DB BRIDGE] Native Rust Cosmos Bridge aktif di http://{}", cosmos_addr);
+                    let _ = axum::serve(cosmos_listener, app_cosmos).await;
+                }
+                Err(_) => {
+                    tracing::info!("☁️ [COSMOS DB BRIDGE] Port 5005 sudah digunakan service lain, menggunakan endpoint utama /api/cosmos/*");
+                }
+            }
+        });
 
         // 5. Jalankan Server HTTP & WebSocket
         let addr = SocketAddr::from(([0, 0, 0, 0], port));

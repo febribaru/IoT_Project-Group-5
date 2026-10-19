@@ -17,6 +17,7 @@
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 
   <link rel="stylesheet" href="style.css?v=3.3" />
+  <link rel="stylesheet" href="history.css?v=1.4_modal" />
   <style>
     /* Dynamic TinyML Classes & Adaptive Learning Styles */
     .tinyml-dynamic-classes-container {
@@ -436,6 +437,15 @@
 
   <div class="app-layout">
     <!-- =========================================================
+         NAVIGASI TAB: PENGAMBILAN DATA <-> HISTORY
+         ========================================================= -->
+    <nav class="view-tabs glass-card" aria-label="Navigasi halaman">
+      <button type="button" class="view-tab-btn active" data-view="acquisition">📡 Pengambilan Data</button>
+      <button type="button" class="view-tab-btn" data-view="history">🗂️ History Data <span class="tab-count" id="tabHistoryCount" style="display:none;">0</span></button>
+      <span class="tab-sampling-indicator" id="tabSamplingIndicator" style="display:none;">● Sampling berjalan</span>
+    </nav>
+
+    <!-- =========================================================
          SIDEBAR KIRI (Modular Floating Glassmorphic Cards)
          ========================================================= -->
     <aside class="sidebar">
@@ -487,12 +497,12 @@
         </div>
 
         <div class="form-group">
-          <label for="portSelect" class="input-label">Hardware Port Chamber</label>
+          <label for="portSelect" class="input-label">Pilih Jalur Data (IoT / Kabel USB)</label>
           <div class="custom-select-wrapper">
             <select id="portSelect" class="custom-select">
-              <option value="AZURE_IOT_HUB" selected>☁️ Nirkabel IoT • Wi-Fi Hotspot POCO (UDP 5005)</option>
-              <option value="COM6">🔌 COM6 • ESP32-S3 USB Serial</option>
-              <option value="SIM">🎮 SIM-01 • Simulator Robusta VOC</option>
+              <option value="AZURE_IOT_HUB" selected>☁️ IoT Nirkabel (Wi-Fi / Cloud)</option>
+              <option value="COM6">🔌 Kabel USB (COM6 • ESP32-S3)</option>
+              <option value="SIM">🎮 Simulator Lokal (SIM-01)</option>
             </select>
             <span class="select-arrow">▼</span>
           </div>
@@ -528,23 +538,23 @@
         <div class="esp-status-card" id="espStatusBox">
           <div class="esp-status-header">
             <div class="esp-status-indicator">
-              <span class="esp-status-dot" style="background: #94a3b8; box-shadow: none;"></span>
-              <span class="esp-status-title">Hardware Link: ESP32-S3</span>
+              <span class="esp-status-dot" style="background: #ef4444; box-shadow: none;"></span>
+              <span class="esp-status-title">Status Koneksi: ESP32-S3</span>
             </div>
-            <span class="esp-badge" id="espBadge" style="background: #1e293b; color: #94a3b8; border: 1px solid #334155;">STANDBY</span>
+            <span class="esp-badge" id="espBadge" style="background: #1e293b; color: #94a3b8; border: 1px solid #334155;">OFFLINE</span>
           </div>
           <div class="esp-status-details">
             <div class="esp-detail-row">
               <span class="esp-detail-label">Jalur Data:</span>
-              <span class="esp-detail-value font-mono text-muted" id="espDetailPort">Memeriksa Perangkat...</span>
+              <span class="esp-detail-value font-mono text-muted" id="espDetailPort">Memeriksa (IoT / Kabel USB)...</span>
             </div>
             <div class="esp-detail-row">
-              <span class="esp-detail-label">Wi-Fi & IP:</span>
-              <span class="esp-detail-value font-mono text-muted" id="espDetailWifi">Hotspot POCO (Standby)</span>
+              <span class="esp-detail-label">Jaringan / Port:</span>
+              <span class="esp-detail-value font-mono text-muted" id="espDetailWifi">Menunggu Sinyal ESP32...</span>
             </div>
             <div class="esp-detail-row">
               <span class="esp-detail-label">Status ESP32:</span>
-              <span class="esp-detail-value font-mono text-muted" id="espDetailLed">⚫ Standby</span>
+              <span class="esp-detail-value font-mono text-muted" id="espDetailLed">🔴 Offline (Menunggu Perangkat)</span>
             </div>
           </div>
         </div>
@@ -863,73 +873,49 @@
           </button>
         </div>
 
-        <!-- ThingsBoard OTA Package Form -->
-        <div class="ota-package-form" style="display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.5rem;">
-          
-          <!-- 1. Package Title / Name -->
-          <div class="form-group" style="margin-bottom: 0;">
-            <label class="input-label" style="font-size: 0.72rem; color: #94a3b8; display: flex; justify-content: space-between;">
-              <span>Package Title</span>
-              <span style="color: #00f5d4; font-size: 0.68rem;">Type: Firmware</span>
-            </label>
-            <input type="text" id="otaPackageTitle" class="form-control" value="Robusta Olfactory TinyML Core Firmware" style="width: 100%; background: #0b1120; border: 1px solid #1e293b; color: #f8fafc; border-radius: 6px; padding: 0.35rem 0.55rem; font-size: 0.78rem;" />
+        <!-- ThingsBoard Cloud OTA Details Grid -->
+        <div class="ota-details-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-top: 0.6rem; font-size: 0.72rem;">
+          <div style="background: #080d1a; border: 1px solid #1e293b; border-radius: 6px; padding: 0.45rem 0.6rem;">
+            <div style="color: #64748b; font-size: 0.67rem; text-transform: uppercase;">Cloud Package</div>
+            <div id="tbPackageTitle" class="font-bold text-cyan" style="margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">fimware-demo</div>
           </div>
-
-          <!-- 2. Target Version Input (Ketik versi bebas, misal: 1.0.1, 1.0.2, 1.0.3, 1.0.4, dll.) -->
-          <div class="form-group" style="margin-bottom: 0;">
-            <label class="input-label" style="font-size: 0.72rem; color: #94a3b8; display: flex; justify-content: space-between;">
-              <span>Target Version (Ketik Versi Baru)</span>
-              <span id="otaVersionTag" style="color: #38bdf8; font-family: monospace; font-size: 0.68rem; font-weight: bold;">v1.0.5</span>
-            </label>
-            <div style="position: relative; width: 100%;">
-              <input type="text" id="otaVersionInput" list="otaVersionList" class="form-control" placeholder="Ketik versi, misal: 1.0.5" value="1.0.5" style="width: 100%; background: #0b1120; border: 1px solid #1e293b; color: #38bdf8; border-radius: 6px; padding: 0.38rem 0.55rem; font-size: 0.8rem; font-weight: 600; font-family: monospace;" autocomplete="off" />
-              <datalist id="otaVersionList">
-                <option value="1.0.5">1.0.5 • Aura Cyber-Pulse + TinyML</option>
-                <option value="1.0.4">1.0.4 • TinyML AI + Gold-Cyan-Magenta</option>
-                <option value="1.0.3">1.0.3 • Ungu-Oranye-Cyan</option>
-                <option value="1.0.2">1.0.2 • Pink-Cyan-Hijau</option>
-                <option value="1.0.1">1.0.1 • Merah-Kuning-Hijau-Biru</option>
-              </datalist>
-            </div>
+          <div style="background: #080d1a; border: 1px solid #1e293b; border-radius: 6px; padding: 0.45rem 0.6rem;">
+            <div style="color: #64748b; font-size: 0.67rem; text-transform: uppercase;">Ukuran Paket</div>
+            <div id="tbPackageSize" class="font-mono" style="margin-top: 2px; color: #f8fafc;">602.6 KB</div>
           </div>
-
-          <!-- 3. Target Device ID -->
-          <div class="form-group" style="margin-bottom: 0;">
-            <label class="input-label" style="font-size: 0.72rem; color: #94a3b8;">Target Device ID</label>
-            <input type="text" id="otaTargetDeviceId" class="form-control" value="enose-robusta-device-01" readonly style="width: 100%; background: #080d1a; border: 1px solid #1e293b; color: #64748b; border-radius: 6px; padding: 0.35rem 0.55rem; font-size: 0.75rem; font-family: monospace;" />
+          <div style="background: #080d1a; border: 1px solid #1e293b; border-radius: 6px; padding: 0.45rem 0.6rem;">
+            <div style="color: #64748b; font-size: 0.67rem; text-transform: uppercase;">Device Token</div>
+            <div class="font-mono text-amber" style="margin-top: 2px;">cbq9l18oexktzzucit15</div>
           </div>
-
-          <!-- 4. Binary File Upload (.bin) -->
-          <div class="form-group ota-file-group" style="margin-bottom: 0;">
-            <label for="otaFileInput" class="ota-file-label" style="padding: 0.45rem 0.6rem; font-size: 0.75rem; border-radius: 6px; background: #0b1120; border: 1px dashed #38bdf8; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
-              <div style="display: flex; align-items: center; gap: 6px; overflow: hidden;">
-                <svg class="ota-upload-icon text-cyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px; flex-shrink: 0;">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                  <polyline points="17 8 12 3 7 8"></polyline>
-                  <line x1="12" y1="3" x2="12" y2="15"></line>
-                </svg>
-                <span id="otaFileName" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #f8fafc; font-weight: 500;">firmware_v1.0.5.bin • 573 KB</span>
-              </div>
-              <span class="badge-mini" style="font-size: 0.68rem; background: #0284c7; color: #fff; padding: 2px 7px; border-radius: 4px; font-weight: 600; flex-shrink: 0;">Pilih .bin</span>
-            </label>
-            <input type="file" id="otaFileInput" accept=".bin" style="display: none;" />
+          <div style="background: #080d1a; border: 1px solid #1e293b; border-radius: 6px; padding: 0.45rem 0.6rem;">
+            <div style="color: #64748b; font-size: 0.67rem; text-transform: uppercase;">Cloud Server</div>
+            <div class="font-mono" style="margin-top: 2px; color: #94a3b8;">thingsboard.cloud</div>
           </div>
-
-          <!-- 5. Release Notes / Changelog -->
-          <div class="form-group" style="margin-bottom: 0;">
-            <label class="input-label" style="font-size: 0.72rem; color: #94a3b8;">Release Notes & Deskripsi</label>
-            <textarea id="otaReleaseNotes" rows="2" class="form-control" style="width: 100%; background: #0b1120; border: 1px solid #1e293b; color: #cbd5e1; border-radius: 6px; padding: 0.35rem 0.55rem; font-size: 0.72rem; resize: none;">Firmware v1.0.5: Aura Cyber-Pulse RGB + On-Device TinyML classifier enhancement for robust coffee aroma sensing.</textarea>
-          </div>
-
         </div>
 
-        <!-- ThingsBoard Action Button: Assign & Deploy -->
-        <button id="btnPushOTA" class="btn btn-primary-gradient btn-block btn-ota-push" style="margin-top: 0.75rem;">
+        <!-- Hidden inputs to prevent any legacy script breaking -->
+        <div style="display: none;">
+          <input type="text" id="otaPackageTitle" value="fimware-demo" />
+          <input type="text" id="otaVersionInput" value="1.2.0" />
+          <span id="otaVersionTag">v1.2.0</span>
+          <span id="otaFileName">fimware-demo • 602.6 KB</span>
+          <input type="file" id="otaFileInput" />
+          <textarea id="otaReleaseNotes"></textarea>
+          <input type="text" id="otaTargetDeviceId" value="cbq9l18oexktzzucit15" />
+        </div>
+
+        <!-- ThingsBoard Action Button: Sinkronisasi & Cek OTA -->
+        <button id="btnPushOTA" class="btn btn-primary-gradient btn-block btn-ota-push" style="margin-top: 0.75rem;" title="Sinkronisasi versi ke ThingsBoard langsung. Hentikan sensor & pompa, jika ada versi baru maka ESP32 download & restart.">
           <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <polyline points="1 20 1 14 7 14"></polyline>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
           </svg>
-          <span id="btnPushOTAText">Assign & Push Package</span>
+          <span id="btnPushOTAText">⚡ Sinkronisasi & Cek OTA ThingsBoard</span>
         </button>
+        <div style="font-size: 0.68rem; color: #94a3b8; text-align: center; margin-top: 5px; line-height: 1.35;">
+          🔒 <i>Tekan tombol untuk cek versi ke ThingsBoard. Seluruh sistem (sensor & pompa) akan stop. Jika ada versi baru, ESP32 otomatis download & restart.</i>
+        </div>
 
         <!-- Realtime Live OTA Download & Flash Monitor -->
         <div class="ota-progress-container" id="otaProgressBox" style="margin-top: 0.6rem;">
@@ -1032,11 +1018,11 @@
           <div class="status-strip-cluster">
             <span class="status-strip-label">CHAMBER ENVIRONMENT</span>
             <div class="status-strip-items">
-              <!-- DHT22 #1: Inlet GPIO 5 -->
-              <div class="header-chip dht-chip" title="DHT22 Sensor Chamber (GPIO 5, 3.3V, GND)">
+              <!-- DHT22 #1: Inlet GPIO 10 -->
+              <div class="header-chip dht-chip" title="DHT22 Sensor Chamber (GPIO 10, 3.3V, GND)">
                 <span class="chip-icon">🌡️</span>
                 <div class="chip-info">
-                  <span class="chip-tag">Chamber (GPIO 5)</span>
+                  <span class="chip-tag">Chamber (GPIO 10)</span>
                   <span class="chip-text font-mono"><span id="dht1Temp">--.-</span> °C • <span id="dht1Hum">--.-</span> %RH</span>
                 </div>
               </div>
@@ -1447,88 +1433,6 @@
         </div>
       </section>
 
-      <!-- =========================================================
-           EDGE IMPULSE FEATURE EXPLORER & CLUSTER VISUALIZER
-           ========================================================= -->
-      <section class="glass-card feature-explorer-card" id="featureExplorerCard">
-        <div class="explorer-header">
-          <div class="explorer-title-box">
-            <div class="explorer-badge">
-              <span class="explorer-dot"></span>
-              <span class="explorer-brand">Edge Impulse Feature Explorer</span>
-              <span class="explorer-tag font-mono">2D Cluster Projection • Bank Sampel Kopi</span>
-            </div>
-            <h3 class="explorer-title">Persebaran Klaster Sampel Kopi & Posisi Real-Time</h3>
-            <p class="explorer-desc">Peta sebaran fitur 8 sensor gas dalam ruang klaster (Feature Space) berdasarkan kelas kopi yang dikumpulkan. Titik putih 🎯 menunjukkan posisi data sensor chamber saat ini.</p>
-          </div>
-
-          <div class="explorer-controls">
-            <div class="axis-selector-group">
-              <label for="clusterAxisSelect" class="axis-label">Sumbu Koordinat:</label>
-              <div class="custom-select-wrapper">
-                <select id="clusterAxisSelect" class="custom-select axis-select">
-                  <option value="mq3_mq7" selected>Sumbu X: MQ-3 (Alkohol/Fermentasi) vs Sumbu Y: MQ-7 (CO/Sangrai)</option>
-                  <option value="mq6_mq135">Sumbu X: MQ-6 (Hidrokarbon) vs Sumbu Y: MQ-135 (Amonia/Sulfida)</option>
-                  <option value="tgs2602_tgs2611">Sumbu X: TGS-2602 (VOC/Aroma Kopi) vs Sumbu Y: TGS-2611 (Metana)</option>
-                  <option value="tgs2600_tgs2620">Sumbu X: TGS-2600 (Kontaminan) vs Sumbu Y: TGS-2620 (Pelarut/Organik)</option>
-                </select>
-                <span class="select-arrow">▼</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="explorer-body">
-          <!-- Scatter Plot Canvas Container -->
-          <div class="explorer-chart-box">
-            <div class="explorer-canvas-wrapper">
-              <canvas id="clusterScatterChart"></canvas>
-            </div>
-            <div class="cluster-overlay-status" id="clusterCurrentStatus">
-              <div class="pulse-marker"></div>
-              <span id="clusterCurrentText">🎯 Posisi Sampel Saat Ini: Menunggu data sensor...</span>
-            </div>
-          </div>
-
-          <!-- Model Performance & Dynamic Classes Summary -->
-          <div class="explorer-metrics-sidebar">
-            <div class="metrics-panel-header">
-              <span class="metrics-panel-title">Model Status</span>
-              <span class="metrics-chip-acc" id="explorerModelStatusChip">Adaptive Softmax</span>
-            </div>
-
-            <div class="metrics-grid-mini">
-              <div class="m-card">
-                <span class="m-k">Arsitektur</span>
-                <span class="m-v text-cyan">8-Ch Softmax</span>
-              </div>
-              <div class="m-card">
-                <span class="m-k">Chip Latency</span>
-                <span class="m-v text-emerald">< 3 µs</span>
-              </div>
-              <div class="m-card">
-                <span class="m-k">Total Data</span>
-                <span class="m-v font-mono" id="explorerTotalSamples">0 Sampel</span>
-              </div>
-              <div class="m-card">
-                <span class="m-k">Kelas Kopi</span>
-                <span class="m-v text-violet font-mono" id="explorerTotalClasses">0 Jenis</span>
-              </div>
-            </div>
-
-            <!-- Dynamic Sample Bank Class Distribution -->
-            <div class="confusion-matrix-box">
-              <div class="cm-header-row">
-                <span class="cm-title">Distribusi Bank Sampel AI</span>
-                <span class="cm-badge" id="explorerBankBadge">Real Data</span>
-              </div>
-              <div id="clusterBankClassList" style="padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; font-size: 0.74rem;">
-                <div style="color: #64748b; font-style: italic;">Belum ada sampel tersimpan. Jalankan sampling atau uji cepat untuk menambahkan sampel kopi.</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
 
       <!-- =========================================================
            HARDWARE DAQ & I2C MAPPING ARCHITECTURE (TIM 1 EDGE)
@@ -1616,6 +1520,117 @@
       </section>
 
     </main>
+
+    <!-- =========================================================
+         TAB 2: HISTORY VIEW (REKAP SESI PENGAMBILAN DATA LENGKAP)
+         ========================================================= -->
+    <section class="history-view" id="historyView" aria-label="History Pengambilan Data">
+      <!-- Top Card: Header & Action Summary -->
+      <div class="glass-card hist-header">
+        <div>
+          <div class="hist-detail-kicker">DATABASE & ARSIP LAB E-NOSE</div>
+          <h2 class="hist-title">Riwayat Sesi Pengambilan Data</h2>
+          <p class="hist-subtitle">Merekam seluruh kondisi instrumen saat sampling: waktu pengambilan (WIB), durasi, varietas, suhu/kelembaban DHT22, respon 8 sensor gas, dan inferensi TinyML.</p>
+        </div>
+        <div class="hist-header-actions">
+          <span class="hist-chip hist-chip-cloud" id="historyStorageChip">☁️ Memeriksa Sinkronisasi Cloud...</span>
+          <button type="button" class="btn btn-outline" id="histBtnSnapshot" title="Catat kondisi pembacaan sensor saat ini langsung ke History">
+            📸 Catat Kondisi Saat Ini
+          </button>
+          <button type="button" class="btn btn-outline" id="histBtnRefresh" title="Muat ulang riwayat dari Cloud / Lokal">
+            🔄 Refresh
+          </button>
+          <button type="button" class="btn btn-outline" id="histBtnSync" title="Kirim data cache lokal yang belum tersimpan di Cloud">
+            ☁️ Sinkronkan Sekarang
+          </button>
+          <button type="button" class="btn btn-primary-gradient" id="histBtnExportAll" title="Ekspor semua sesi yang terfilter ke Excel/CSV">
+            📊 Ekspor Semua (CSV)
+          </button>
+        </div>
+      </div>
+
+      <!-- Stat Cards -->
+      <div class="hist-stats">
+        <div class="glass-card hist-stat">
+          <div class="hist-stat-label">Total Sesi Pengujian</div>
+          <div class="hist-stat-value text-cyan" id="histStatTotal">0</div>
+        </div>
+        <div class="glass-card hist-stat">
+          <div class="hist-stat-label">Total Titik Data Sensor</div>
+          <div class="hist-stat-value font-mono" id="histStatPoints">0</div>
+        </div>
+        <div class="glass-card hist-stat">
+          <div class="hist-stat-label">Pengujian Hari Ini (WIB)</div>
+          <div class="hist-stat-value text-emerald" id="histStatToday">0</div>
+        </div>
+        <div class="glass-card hist-stat">
+          <div class="hist-stat-label">Sesi Pengambilan Terakhir</div>
+          <div class="hist-stat-value small text-amber" id="histStatLast">–</div>
+        </div>
+      </div>
+
+      <!-- Filter Bar -->
+      <div class="glass-card hist-filters">
+        <div class="hist-field grow">
+          <label for="histSearch">Cari Sampel / ID / Catatan:</label>
+          <input type="search" id="histSearch" placeholder="Ketik nama kopi (cth. Robusta Dampit, C05, M01)..." />
+        </div>
+        <div class="hist-field">
+          <label for="histFilterRoast">Tingkat Sangrai:</label>
+          <select id="histFilterRoast">
+            <option value="">Semua Roast</option>
+          </select>
+        </div>
+        <div class="hist-field">
+          <label for="histFilterStatus">Status Pengujian:</label>
+          <select id="histFilterStatus">
+            <option value="">Semua Status</option>
+            <option value="SELESAI">Selesai (300s)</option>
+            <option value="DIHENTIKAN">Dihentikan</option>
+          </select>
+        </div>
+        <div class="hist-field">
+          <label for="histDateFrom">Dari Tanggal:</label>
+          <input type="date" id="histDateFrom" />
+        </div>
+        <div class="hist-field">
+          <label for="histDateTo">Sampai Tanggal:</label>
+          <input type="date" id="histDateTo" />
+        </div>
+        <button type="button" class="btn btn-outline" id="histBtnReset" style="padding: 8px 12px; font-size: 0.8rem;">
+          Reset Filter
+        </button>
+      </div>
+
+      <!-- Table Card -->
+      <div class="glass-card hist-table-card">
+        <div class="hist-table-scroll">
+          <table class="hist-table">
+            <thead>
+              <tr>
+                <th>Waktu Ambil (WIB)</th>
+                <th>Sampel & ID</th>
+                <th>Roast / Asal</th>
+                <th>Durasi</th>
+                <th>Status</th>
+                <th>DHT #1 / #2 (Suhu & RH)</th>
+                <th>TinyML AI</th>
+                <th>Penyimpanan</th>
+                <th style="text-align: right;">Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="historyTableBody">
+              <tr>
+                <td colspan="9" class="hist-empty">
+                  <div class="hist-empty-icon">⏳</div>
+                  <strong>Memuat riwayat pengambilan data...</strong>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
   </div>
 
   <!-- =========================================================
@@ -2013,11 +2028,24 @@
     </div>
   </div>
 
+  <!-- =========================================================
+       MODAL DETAIL SESI PENGAMBILAN DATA (HISTORY)
+       ========================================================= -->
+  <div class="hist-modal" id="historyDetailModal" style="display: none;">
+    <div class="hist-modal-panel">
+      <button type="button" class="hist-modal-close" id="historyDetailClose" title="Tutup Modal (Esc)">✕</button>
+      <div id="historyDetailContent">
+        <!-- Konten detail diinjeksi dinamis oleh history-view.js -->
+      </div>
+    </div>
+  </div>
+
   <!-- Toast Notification System -->
   <div class="toast-container" id="toastContainer"></div>
 
   <!-- Application Logic -->
   <script src="dataset/cluster_data.js?v=3.4"></script>
-  <script src="script.js?v=4.0_azure_ota_fixed"></script>
+  <script src="script.js?v=5.2_history"></script>
+  <script src="history-view.js?v=1.4_modal"></script>
 </body>
 </html>

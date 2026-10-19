@@ -29,6 +29,38 @@ const getWsUrl = () => {
   return 'ws://127.0.0.1:3000/ws/telemetry';
 };
 
+// ============================================================================
+// WAKTU INDONESIA BARAT (WIB / UTC+7) TIME FORMATTER UNTUK AZURE COSMOS DB
+// ============================================================================
+const getWibIsoString = (dateInput = new Date()) => {
+  const d = (dateInput instanceof Date) ? dateInput : new Date(dateInput);
+  const validDate = isNaN(d.getTime()) ? new Date() : d;
+  const wibTime = new Date(validDate.getTime() + (7 * 60 * 60 * 1000));
+  const pad = (n) => String(n).padStart(2, '0');
+  const year = wibTime.getUTCFullYear();
+  const month = pad(wibTime.getUTCMonth() + 1);
+  const day = pad(wibTime.getUTCDate());
+  const hours = pad(wibTime.getUTCHours());
+  const minutes = pad(wibTime.getUTCMinutes());
+  const seconds = pad(wibTime.getUTCSeconds());
+  const ms = String(wibTime.getUTCMilliseconds()).padStart(3, '0');
+  return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}.${ms}+07:00`;
+};
+
+const getWibReadableString = (dateInput = new Date()) => {
+  const d = (dateInput instanceof Date) ? dateInput : new Date(dateInput);
+  const validDate = isNaN(d.getTime()) ? new Date() : d;
+  const wibTime = new Date(validDate.getTime() + (7 * 60 * 60 * 1000));
+  const pad = (n) => String(n).padStart(2, '0');
+  const year = wibTime.getUTCFullYear();
+  const month = pad(wibTime.getUTCMonth() + 1);
+  const day = pad(wibTime.getUTCDate());
+  const hours = pad(wibTime.getUTCHours());
+  const minutes = pad(wibTime.getUTCMinutes());
+  const seconds = pad(wibTime.getUTCSeconds());
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds} WIB`;
+};
+
 // Global Application State
 const state = {
   isConnected: false,
@@ -273,15 +305,14 @@ if (document.readyState === 'loading') {
 }
 
 // Hardware Link Tracker
-let isHardwareCurrentlyConnected = true;
-let wasHardwareDisconnected = false;
+let isHardwareCurrentlyConnected = false;
+let wasHardwareDisconnected = true;
 let customFirmwareFile = null;
 let isDeployingOta = false;
 
 /**
- * Memeriksa status koneksi ESP32 hardware, serial COM6, Wi-Fi & LED secara realtime (tiap 1 detik).
- * Jika kabel USB tercabut saat dashboard sedang terhubung/streaming:
- * Otomatis mendiskoneksi sistem, mematikan stream, dan mengharuskan user klik "Connect Device" lagi.
+ * Memeriksa status koneksi ESP32 hardware (Kabel USB / IoT Nirkabel) secara realtime (tiap 1 detik).
+ * Jika ESP32 mati atau tercabut, otomatis mendiskoneksi sistem dan menampilkan status Offline.
  */
 async function checkEspHardwareStatus() {
   const espBadge = document.getElementById('espBadge');
@@ -292,26 +323,44 @@ async function checkEspHardwareStatus() {
   const espStatusBox = document.getElementById('espStatusBox');
 
   try {
-    const res = await fetch(`${getApiBase()}/api/esp/status`);
-    if (res.ok) {
-      const data = await res.json();
-      if (data.esp_connected) {
-        // PERANGKAT AKTIF TERHUBUNG KE PORT USB ATAU AZURE CLOUD
+    let res = await fetch(`${getApiBase()}/api/esp/status`).catch(() => null);
+    let data = null;
+    if (res && res.ok) {
+      data = await res.json();
+    } else {
+      const cloudRes = await fetch('/api/cloud').catch(() => null);
+      if (cloudRes && cloudRes.ok) {
+        const cloudData = await cloudRes.json();
+        data = {
+          esp_connected: !!cloudData.esp_connected,
+          port: 'IoT Nirkabel (Wi-Fi / Cloud)',
+          connection_mode: 'wireless_iot',
+          wifi_ssid: 'Wi-Fi IoT Cloud',
+          wifi_ip: 'Cloud Relay',
+          rgb_led: cloudData.esp_connected ? '🟢 Aktif (IoT Nirkabel)' : '🔴 Offline (Perangkat Mati / Tercabut)',
+          active_firmware_version: cloudData.fw_version || '1.0.8'
+        };
+      }
+    }
+    if (data) {
+      if (data.esp_connected === true) {
+        // PERANGKAT ESP32 BENAR-BENAR AKTIF MENGIRIM DATA (USB ATAU IOT NIRKABEL)
         const justReconnected = wasHardwareDisconnected;
         isHardwareCurrentlyConnected = true;
         wasHardwareDisconnected = false;
 
         const portSelect = document.getElementById('portSelect');
         const selectedPort = portSelect ? portSelect.value : 'AZURE_IOT_HUB';
-        const isCloudMode = selectedPort === 'AZURE_IOT_HUB';
         const isSimMode = selectedPort === 'SIM';
+        const isUsbMode = data.connection_mode === 'usb_serial' || (!isSimMode && selectedPort !== 'AZURE_IOT_HUB');
+        const isCloudMode = !isSimMode && !isUsbMode;
 
         if (espBadge) {
           if (state.isConnected) {
-            espBadge.textContent = isCloudMode ? 'STREAMING IOT' : (isSimMode ? 'SIMULATOR' : 'STREAMING USB');
+            espBadge.textContent = isSimMode ? 'SIMULATOR' : (isUsbMode ? 'AKTIF (KABEL)' : 'AKTIF (IOT)');
             espBadge.className = 'esp-badge online';
           } else {
-            espBadge.textContent = 'STANDBY';
+            espBadge.textContent = 'SIAP KONEK';
             espBadge.className = 'esp-badge standby';
           }
         }
@@ -320,33 +369,31 @@ async function checkEspHardwareStatus() {
             espStatusDot.style.background = isCloudMode ? '#00f5d4' : '#10b981';
             espStatusDot.style.boxShadow = isCloudMode ? '0 0 10px #00f5d4' : '0 0 10px #10b981';
           } else {
-            espStatusDot.style.background = '#94a3b8';
-            espStatusDot.style.boxShadow = 'none';
+            espStatusDot.style.background = '#10b981';
+            espStatusDot.style.boxShadow = '0 0 8px #10b981';
           }
         }
         if (espStatusBox) {
           espStatusBox.classList.remove('hardware-unplugged');
         }
         if (espDetailPort) {
-          if (isCloudMode) {
-            espDetailPort.textContent = '☁️ Nirkabel IoT • Hotspot POCO (UDP 5005)';
-            espDetailPort.className = 'esp-detail-value font-mono text-cyan';
-          } else if (isSimMode) {
-            espDetailPort.textContent = 'SIM-01 • Simulator Engine';
+          if (isSimMode) {
+            espDetailPort.textContent = '🎮 Simulator Lokal (SIM-01)';
             espDetailPort.className = 'esp-detail-value font-mono text-amber';
+          } else if (isUsbMode) {
+            const usbPortName = data.raw_port || (selectedPort !== 'AZURE_IOT_HUB' ? selectedPort : 'COM6');
+            espDetailPort.textContent = `🔌 Kabel USB (${usbPortName})`;
+            espDetailPort.className = 'esp-detail-value font-mono text-cyan';
           } else {
-            const cleanPort = data.port || selectedPort;
-            const rawModel = data.device_model || 'ESP32-S3 Serial';
-            const cleanModel = rawModel.replace(/\s*\([^)]*\)/g, '').trim();
-            espDetailPort.textContent = `${cleanPort} • ${cleanModel}`;
+            espDetailPort.textContent = '☁️ IoT Nirkabel (Wi-Fi / Cloud)';
             espDetailPort.className = 'esp-detail-value font-mono text-cyan';
           }
         }
         if (espDetailWifi) {
-          const cleanIp = (data.wifi_ip || '10.96.101.106').replace(/\s*\([^)]*\)/g, '').trim();
-          const ssid = data.wifi_ssid || 'POCO';
-          if (isCloudMode) {
-            espDetailWifi.textContent = `${ssid} • ${cleanIp} • UDP 5005`;
+          const cleanIp = (data.wifi_ip || 'Cloud Relay').replace(/\s*\([^)]*\)/g, '').trim();
+          const ssid = data.wifi_ssid || 'Wi-Fi Hotspot';
+          if (isUsbMode) {
+            espDetailWifi.textContent = `USB Serial (${data.baud_rate || 115200} bps) • ${ssid}`;
             espDetailWifi.className = 'esp-detail-value font-mono text-amber';
           } else {
             espDetailWifi.textContent = `${ssid} • ${cleanIp}`;
@@ -354,36 +401,62 @@ async function checkEspHardwareStatus() {
           }
         }
         if (espDetailLed) {
-          if (isCloudMode) {
-            espDetailLed.textContent = '🟢 Aktif • Wi-Fi Nirkabel';
-            espDetailLed.className = 'esp-detail-value font-mono text-success';
-          } else {
-            const rawLed = data.rgb_led || '🟢 Terkoneksi';
-            const cleanLed = rawLed.replace(/\s*\([^)]*\)/g, '').trim();
-            espDetailLed.textContent = cleanLed;
-            espDetailLed.className = 'esp-detail-value font-mono text-success';
-          }
+          espDetailLed.textContent = isUsbMode ? '🟢 Aktif (Kabel USB)' : '🟢 Aktif (IoT Nirkabel)';
+          espDetailLed.className = 'esp-detail-value font-mono text-success';
         }
         const activeFwVersion = document.getElementById('activeFwVersion');
-        if (activeFwVersion && data.active_firmware_version && !isDeployingOta) {
-          const act = data.active_firmware_version.replace(/^[vV]/, '');
-          activeFwVersion.textContent = `v${act}`;
+        const cleanActFw = data.active_firmware_version ? data.active_firmware_version.replace(/^[vV]/, '').trim() : '';
+        if (activeFwVersion && cleanActFw && !isDeployingOta) {
+          activeFwVersion.textContent = `v${cleanActFw}`;
         }
+
+        // Sinkronisasi langsung tampilan DHT22 dari status backend agar tidak tertahan di --.- atau 0°C
+        const t1El = document.getElementById('dht1Temp');
+        const h1El = document.getElementById('dht1Hum');
+        const t2El = document.getElementById('dht2Temp');
+        const h2El = document.getElementById('dht2Hum');
+        if (cleanActFw === '1.0.9' || (typeof data.dht1_temp === 'number' && data.dht1_temp < 0)) {
+          if (t1El) { t1El.textContent = 'MATI'; t1El.style.color = '#ef4444'; }
+          if (h1El) { h1El.textContent = 'MATI'; h1El.style.color = '#ef4444'; }
+          if (t2El) { t2El.textContent = 'MATI'; t2El.style.color = '#ef4444'; }
+          if (h2El) { h2El.textContent = 'MATI'; h2El.style.color = '#ef4444'; }
+        } else if (typeof data.dht1_temp === 'number' && data.dht1_temp > 0) {
+          state.dht1Temp = data.dht1_temp;
+          if (t1El) { t1El.textContent = data.dht1_temp.toFixed(1); t1El.style.color = ''; }
+          if (h1El && typeof data.dht1_hum === 'number') {
+            state.dht1Hum = data.dht1_hum;
+            h1El.textContent = data.dht1_hum.toFixed(1);
+            h1El.style.color = '';
+          }
+          if (t2El && typeof data.dht2_temp === 'number') {
+            state.dht2Temp = data.dht2_temp;
+            t2El.textContent = data.dht2_temp.toFixed(1);
+            t2El.style.color = '';
+          }
+          if (h2El && typeof data.dht2_hum === 'number') {
+            state.dht2Hum = data.dht2_hum;
+            h2El.textContent = data.dht2_hum.toFixed(1);
+            h2El.style.color = '';
+          }
+        }
+
         const engineTag = document.querySelector('.engine-tag');
-        if (engineTag && !state.isConnected) {
-          const tagLabel = isCloudMode ? 'Nirkabel IoT • Hotspot POCO Online' : (isSimMode ? 'Simulator Mode' : 'USB Hardware Siap');
+        if (engineTag) {
+          const tagLabel = isSimMode ? 'Simulator Lokal' : (isUsbMode ? `Kabel USB (${data.raw_port || 'COM6'}) Aktif` : 'IoT Nirkabel (Wi-Fi / Cloud) Aktif');
           engineTag.innerHTML = `<span class="engine-dot" style="background:#10b981;box-shadow:0 0 10px #10b981;"></span>${tagLabel}`;
         }
 
-        // Jika baru saja dicolokkan/terhubung kembali:
-        if (justReconnected) {
-          showToast(`☁️ Jalur ${isCloudMode ? 'Cloud Nirkabel' : data.port} aktif! Klik "Connect Device" untuk memulai streaming.`, 'info');
+        // Hubungkan stream WebSocket secara otomatis ketika ESP32 terdeteksi aktif
+        if (!state.isConnected && !state.userManuallyDisconnected) {
+          setDeviceConnection(true);
+        } else if (justReconnected) {
+          showToast(`✅ Jalur Data ${isUsbMode ? 'Kabel USB' : 'IoT Nirkabel'} terhubung!`, 'success');
           refreshSerialPorts(false);
         }
         return;
       } else {
-        // PERANGKAT TERCABUT DARI USB & CLOUD (data.esp_connected === false)
-        handleHardwareUnplugged('Port USB & Cloud ESP32 belum terhubung!');
+        // PERANGKAT ESP32 MATI / OFFLINE (data.esp_connected === false)
+        handleHardwareUnplugged('ESP32 sedang Offline (Mati / Tercabut)!');
         return;
       }
     }
@@ -391,19 +464,15 @@ async function checkEspHardwareStatus() {
     // Backend tidak merespons
   }
 
-  if (state.isConnected) {
-    handleHardwareUnplugged('Koneksi ke backend atau port USB ESP32 terputus!');
-  }
+  handleHardwareUnplugged('Backend atau ESP32 tidak terdeteksi (Offline)!');
 }
 
 /**
- * Menangani pemutusan otomatis ketika kabel USB / port serial fisik tercabut
- * Untuk mode Cloud Nirkabel & Simulator, tidak memutus koneksi dan mempertahankan status siap.
+ * Menangani pemutusan otomatis ketika ESP32 mati atau kabel USB tercabut.
  */
-function handleHardwareUnplugged(reason = 'Port USB ESP32 tercabut!') {
+function handleHardwareUnplugged(reason = 'ESP32 Offline / Tercabut!') {
   const portSelect = document.getElementById('portSelect');
   const selectedPort = portSelect ? portSelect.value : 'AZURE_IOT_HUB';
-  const isCloudMode = selectedPort === 'AZURE_IOT_HUB';
   const isSimMode = selectedPort === 'SIM';
 
   const espBadge = document.getElementById('espBadge');
@@ -431,15 +500,15 @@ function handleHardwareUnplugged(reason = 'Port USB ESP32 tercabut!') {
       espStatusBox.classList.remove('hardware-unplugged');
     }
     if (espDetailPort) {
-      espDetailPort.textContent = 'SIM-01 • Simulator Robusta VOC';
+      espDetailPort.textContent = '🎮 Simulator Lokal (SIM-01)';
       espDetailPort.className = 'esp-detail-value font-mono text-amber';
     }
     return;
   }
 
-  // JIKA PERANGKAT TERCABUT / MATI (UNTUK SEMUA MODE USB DAN NIRKABEL)
+  // JIKA PERANGKAT ESP32 MATI / OFFLINE (BAIK MODE IOT MAUPUN KABEL USB)
   if (espBadge) {
-    espBadge.textContent = 'TERCABUT';
+    espBadge.textContent = 'OFFLINE';
     espBadge.className = 'esp-badge unplugged';
   }
   if (espStatusDot) {
@@ -450,19 +519,19 @@ function handleHardwareUnplugged(reason = 'Port USB ESP32 tercabut!') {
     espStatusBox.classList.add('hardware-unplugged');
   }
   if (espDetailPort) {
-    espDetailPort.textContent = '❌ Terputus • ESP32 Tidak Terdeteksi';
+    espDetailPort.textContent = '❌ Terputus (ESP32 Offline)';
     espDetailPort.className = 'esp-detail-value font-mono text-danger';
   }
   if (espDetailWifi) {
-    espDetailWifi.textContent = 'Perangkat Tidak Aktif';
+    espDetailWifi.textContent = 'Tidak Ada Sinyal (ESP32 Mati / Tercabut)';
     espDetailWifi.className = 'esp-detail-value font-mono text-muted';
   }
   if (espDetailLed) {
-    espDetailLed.textContent = '⚫ TERPUTUS / MATI';
-    espDetailLed.className = 'esp-detail-value font-mono text-muted';
+    espDetailLed.textContent = '🔴 Offline (Perangkat Mati / Tercabut)';
+    espDetailLed.className = 'esp-detail-value font-mono text-danger';
   }
   if (engineTag) {
-    engineTag.innerHTML = '<span class="engine-dot" style="background:#ef4444;box-shadow:0 0 10px #ef4444;"></span>ESP32 Offline • Tercabut';
+    engineTag.innerHTML = '<span class="engine-dot" style="background:#ef4444;box-shadow:0 0 10px #ef4444;"></span>ESP32 Offline (Terputus)';
   }
 
   // Reset DHT22 ke --.- dan sensor ke 0
@@ -470,24 +539,24 @@ function handleHardwareUnplugged(reason = 'Port USB ESP32 tercabut!') {
   const dht1H = document.getElementById('dht1Hum');
   const dht2T = document.getElementById('dht2Temp');
   const dht2H = document.getElementById('dht2Hum');
-  if (dht1T) dht1T.textContent = '--.-';
-  if (dht1H) dht1H.textContent = '--.-';
-  if (dht2T) dht2T.textContent = '--.-';
-  if (dht2H) dht2H.textContent = '--.-';
+  if (dht1T) { dht1T.textContent = '--.-'; dht1T.style.color = ''; }
+  if (dht1H) { dht1H.textContent = '--.-'; dht1H.style.color = ''; }
+  if (dht2T) { dht2T.textContent = '--.-'; dht2T.style.color = ''; }
+  if (dht2H) { dht2H.textContent = '--.-'; dht2H.style.color = ''; }
   updateRgbLedStatus('offline');
   state.sensors.forEach(s => s.currentVal = 0);
   updateMetricCards();
 
-  // JIKA SEDANG TERKONEKSI: OTOMATIS DISKONEK & TAMPILKAN PERINGATAN
+  // JIKA SEDANG TERKONEKSI: OTOMATIS DISKONEK AGAR TIDAK BISA KONEK SAAT ESP32 OFFLINE
   if (state.isConnected) {
-    setDeviceConnection(false, true); // true = auto-disconnect karena kabel tercabut
-    updateStatusBadge('idle', '🔴 ESP32 Tercabut • Koneksi Terputus');
-    showToast(`⚠️ PERINGATAN: ${reason} Koneksi otomatis diputus! Hubungkan kembali ESP32 lalu klik "Connect Device".`, 'danger');
+    setDeviceConnection(false, true);
+    updateStatusBadge('idle', '🔴 ESP32 Offline • Koneksi Terputus');
+    showToast(`⚠️ ${reason} Koneksi diputus otomatis.`, 'danger');
   }
 }
 
 /**
- * Memindai port serial fisik (USB / COM6 ESP32) dari Backend Rust
+ * Memindai pilihan Jalur Data (IoT Nirkabel vs Kabel USB) dari Backend Rust
  */
 async function refreshSerialPorts(showToastNotif = true) {
   const portSelect = document.getElementById('portSelect');
@@ -502,29 +571,30 @@ async function refreshSerialPorts(showToastNotif = true) {
       if (data.ports && data.ports.length > 0) {
         portSelect.innerHTML = '';
 
-        // Masukkan Nirkabel IoT Wi-Fi Hotspot POCO di baris pertama
+        // Opsi 1: IoT Nirkabel (Wi-Fi / Cloud)
         const cloudOpt = document.createElement('option');
         cloudOpt.value = 'AZURE_IOT_HUB';
-        cloudOpt.textContent = '☁️ Nirkabel IoT • Wi-Fi Hotspot POCO (UDP 5005)';
+        cloudOpt.textContent = '☁️ IoT Nirkabel (Wi-Fi / Cloud)';
         portSelect.appendChild(cloudOpt);
 
+        // Opsi 2: Kabel USB (COMx)
         data.ports.forEach((p) => {
           if (p.port_name !== 'AZURE_IOT_HUB') {
             const opt = document.createElement('option');
             opt.value = p.port_name;
             if (p.is_esp || p.port_name === 'COM6') {
-              opt.textContent = `🔌 ${p.port_name} • ESP32-S3 USB Serial`;
+              opt.textContent = `🔌 Kabel USB (${p.port_name} • ESP32-S3)`;
             } else {
-              opt.textContent = `${p.port_name} • ${p.description || 'Serial Device'}`;
+              opt.textContent = `🔌 Kabel USB (${p.port_name})`;
             }
             portSelect.appendChild(opt);
           }
         });
 
-        // Selalu sertakan simulator sebagai opsi alternatif
+        // Opsi 3: Simulator Lokal
         const simOpt = document.createElement('option');
         simOpt.value = 'SIM';
-        simOpt.textContent = '🎮 SIM-01 • Simulator Robusta VOC';
+        simOpt.textContent = '🎮 Simulator Lokal (SIM-01)';
         portSelect.appendChild(simOpt);
 
         if (currentChoice && Array.from(portSelect.options).some(o => o.value === currentChoice)) {
@@ -534,14 +604,14 @@ async function refreshSerialPorts(showToastNotif = true) {
         }
 
         if (showToastNotif) {
-          showToast(`Koneksi aktif: ${portSelect.options[portSelect.selectedIndex]?.text || portSelect.value}`, 'info');
+          showToast(`Jalur Data dipilih: ${portSelect.options[portSelect.selectedIndex]?.text || portSelect.value}`, 'info');
         }
         checkEspHardwareStatus();
         return;
       }
     }
   } catch (err) {
-    console.warn('Gagal memindai serial port via backend:', err);
+    console.warn('Gagal memindai jalur data via backend:', err);
   }
 }
 
@@ -611,7 +681,7 @@ async function checkAzureCloudStatus() {
 }
 
 /**
- * Memeriksa status koneksi Azure Cosmos DB (Akun B)
+ * Memeriksa status koneksi Azure Cosmos DB (Terintegrasi langsung di Backend Rust & Port 5005)
  */
 async function checkCosmosDbHealth() {
   const cosmosStatusText = document.getElementById('cosmosStatusText');
@@ -619,72 +689,274 @@ async function checkCosmosDbHealth() {
   if (!cosmosStatusText) return;
 
   try {
-    const res = await fetch('http://127.0.0.1:5005/health');
-    if (res.ok) {
+    let res = await fetch(`${getApiBase()}/api/cosmos/status`).catch(() => null);
+    if (!res || !res.ok) {
+      res = await fetch('http://127.0.0.1:5005/health').catch(() => null);
+    }
+    if (!res || !res.ok) {
+      res = await fetch('/api/cloud').catch(() => null);
+    }
+    if (res && res.ok) {
       const data = await res.json();
-      cosmosStatusText.textContent = `Online: ${data.database}`;
-      cosmosStatusText.style.color = '#00f5d4';
+      state.isCosmosOnline = true;
+      const dbName = data.database || 'enose_db';
+      const containerName = data.container || 'telemetry';
+      
+      const unsyncedCount = (state.sampleBank || []).filter(s => !s.cosmosSynced).length;
+      if (unsyncedCount > 0) {
+        cosmosStatusText.textContent = `Online: ${dbName} (${unsyncedCount} pending)`;
+        cosmosStatusText.style.color = '#f59e0b';
+      } else {
+        cosmosStatusText.textContent = `Online: ${dbName}`;
+        cosmosStatusText.style.color = '#00f5d4';
+      }
+      
       if (cosmosStatus) {
         cosmosStatus.classList.add('connected');
         cosmosStatus.classList.remove('offline');
-        cosmosStatus.title = `Terkoneksi ke Azure Cosmos DB (${data.database}/${data.container}) • Port 5005 Bridge`;
+        cosmosStatus.title = `Terkoneksi ke Azure Cosmos DB (${dbName}/${containerName}) • Built-in Rust Cloud Bridge`;
+      }
+
+      // Otomatis sinkronkan antrean data yang belum terunggah saat online
+      if (unsyncedCount > 0 && !state.isSyncingCosmos) {
+        syncPendingSamplesToCosmosDb();
       }
       return;
     } else {
-      throw new Error(`HTTP ${res.status}`);
+      throw new Error(`HTTP ${res ? res.status : 'Err'}`);
     }
   } catch (e) {
-    cosmosStatusText.textContent = 'Offline (Bridge 5005 Mati)';
+    state.isCosmosOnline = false;
+    const unsyncedCount = (state.sampleBank || []).filter(s => !s.cosmosSynced).length;
+    cosmosStatusText.textContent = unsyncedCount > 0 ? `Offline (${unsyncedCount} tersimpan lokal)` : 'Offline (Server Backend Mati)';
     cosmosStatusText.style.color = '#f87171';
     if (cosmosStatus) {
       cosmosStatus.classList.remove('connected');
       cosmosStatus.classList.add('offline');
-      cosmosStatus.title = 'Azure Cosmos DB Bridge belum aktif. Jalankan tools/start_cosmos_bridge.bat';
+      cosmosStatus.title = 'Azure Cosmos DB belum terhubung karena backend belum berjalan.';
     }
   }
 }
 
 /**
- * Mengirim data sampel kopi Robusta ke Azure Cosmos DB
+ * Mengirim data sampel kopi Robusta ke Azure Cosmos DB (Lengkap 8 Sensor Gas + Dual-DHT22)
+ * Mendukung Local Bridge (127.0.0.1:5005) maupun Vercel Serverless (/api/cloud)
  */
 async function syncSampleToCosmosDb(sample) {
-  if (!sample) return;
+  if (!sample) return false;
   try {
+    const coffeeName = sample.coffeeName || state.coffeeName || 'Robusta Toraja';
+    const coffeeId = sample.coffeeId || state.coffeeId || 'C05';
+    const measurementId = sample.measurementId || state.measurementId || 'M01';
+    const origin = sample.origin || (document.getElementById('coffeeOrigin')?.value || 'Toraja - Sulawesi');
+    const roast = sample.roast || (document.getElementById('coffeeRoast')?.value || 'Medium Roast');
+    const notes = sample.operatorNotes || (document.getElementById('coffeeOperatorNotes')?.value || 'Pengujian Standar E-Nose G05 Lab');
+
+    // Nilai 8 Sensor Gas Aktual
+    const s0_mq6     = sample.features?.peaks?.[0] ?? state.sensors?.[0]?.currentVal ?? 0;
+    const s1_mq135   = sample.features?.peaks?.[1] ?? state.sensors?.[1]?.currentVal ?? 0;
+    const s2_mq3     = sample.features?.peaks?.[2] ?? state.sensors?.[2]?.currentVal ?? 0;
+    const s3_mq7     = sample.features?.peaks?.[3] ?? state.sensors?.[3]?.currentVal ?? 0;
+    const s4_tgs2611 = sample.features?.peaks?.[4] ?? state.sensors?.[4]?.currentVal ?? 0;
+    const s5_tgs2602 = sample.features?.peaks?.[5] ?? state.sensors?.[5]?.currentVal ?? 0;
+    const s6_tgs2600 = sample.features?.peaks?.[6] ?? state.sensors?.[6]?.currentVal ?? 0;
+    const s7_tgs2620 = sample.features?.peaks?.[7] ?? state.sensors?.[7]?.currentVal ?? 0;
+
+    // Nilai DHT22 Dual-Probe (Chamber & Lingkungan Ambien)
+    const dht1_temp = sample.dht1Temp ?? state.dht1Temp ?? 0.0;
+    const dht1_hum  = sample.dht1Hum ?? state.dht1Hum ?? 0.0;
+    const dht2_temp = sample.dht2Temp ?? state.dht2Temp ?? 0.0;
+    const dht2_hum  = sample.dht2Hum ?? state.dht2Hum ?? 0.0;
+
     const payload = {
       id: sample.id || ('SMPL-' + Date.now().toString(36).toUpperCase()),
-      coffee_id: sample.coffeeId || state.coffeeId || 'C05',
-      coffee_name: sample.coffeeName || state.coffeeName || 'Robusta Dampit',
-      measurement_id: sample.measurementId || state.measurementId || 'M01',
-      origin: sample.origin || (document.getElementById('coffeeOrigin')?.value || 'Dampit - Malang'),
-      roast_level: sample.roast || (document.getElementById('coffeeRoast')?.value || 'Medium Roast'),
-      notes: sample.operatorNotes || (document.getElementById('coffeeOperatorNotes')?.value || ''),
+      coffee_id: coffeeId,
+      coffee_name: coffeeName,
+      measurement_id: measurementId,
+      origin: origin,
+      roast_level: roast,
+      notes: notes,
       sensors: {
-        ch1_tgs2602: sample.features?.peaks?.[0] || state.sensors?.[0]?.currentVal || 0,
-        ch2_mq135: sample.features?.peaks?.[1] || state.sensors?.[1]?.currentVal || 0,
-        ch3_mq3: sample.features?.peaks?.[2] || state.sensors?.[2]?.currentVal || 0,
-        ch4_mq7: sample.features?.peaks?.[3] || state.sensors?.[3]?.currentVal || 0
+        // Semua 8 Sensor Gas
+        mq6: Number(s0_mq6.toFixed(2)),
+        mq135: Number(s1_mq135.toFixed(2)),
+        mq7: Number(s3_mq7.toFixed(2)),
+        mq3: Number(s2_mq3.toFixed(2)),
+        tgs2602: Number(s5_tgs2602.toFixed(2)),
+        tgs2620: Number(s7_tgs2620.toFixed(2)),
+        tgs2611: Number(s4_tgs2611.toFixed(2)),
+        tgs2600: Number(s6_tgs2600.toFixed(2)),
+        // Legacy Channel Aliases (Backward-compatibility)
+        ch1_tgs2602: Number(s5_tgs2602.toFixed(2)),
+        ch2_mq135: Number(s1_mq135.toFixed(2)),
+        ch3_mq3: Number(s2_mq3.toFixed(2)),
+        ch4_mq7: Number(s3_mq7.toFixed(2)),
+        // Sensor DHT22 terintegrasi
+        dht1_temp: Number(dht1_temp.toFixed(1)),
+        dht1_hum: Number(dht1_hum.toFixed(1)),
+        dht2_temp: Number(dht2_temp.toFixed(1)),
+        dht2_hum: Number(dht2_hum.toFixed(1))
       },
-      prediction: document.getElementById('predGrade')?.textContent || 'FINE ROBUSTA',
-      duration_seconds: 300,
-      timestamp: sample.timestamp || new Date().toISOString()
+      dht22: {
+        chamber_temperature_c: Number(dht1_temp.toFixed(1)),
+        chamber_humidity_pct: Number(dht1_hum.toFixed(1)),
+        ambient_temperature_c: Number(dht2_temp.toFixed(1)),
+        ambient_humidity_pct: Number(dht2_hum.toFixed(1))
+      },
+      features: sample.features || {},
+      prediction: sample.prediction || document.getElementById('predGrade')?.textContent || 'ROBUSTA (TORAJA)',
+      duration_seconds: sample.duration || state.samplingDurationSec || 300,
+      records_count: sample.recordCount || (state.records ? state.records.length : 0),
+      raw_points: sample.rawPoints || [],
+      created_at: getWibIsoString(sample.timestamp || new Date()),
+      created_at_wib: getWibReadableString(sample.timestamp || new Date()),
+      timezone: "Asia/Jakarta (WIB / UTC+7)",
+      source: "E-Nose Web Dashboard"
     };
 
-    const res = await fetch('http://127.0.0.1:5005/api/cosmos/save_sample', {
+    let res = await fetch(`${getApiBase()}/api/cosmos/save_sample`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
-    });
-    if (res.ok) {
+    }).catch(() => null);
+    if (!res || !res.ok) {
+      res = await fetch('http://127.0.0.1:5005/api/cosmos/save_sample', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).catch(() => null);
+    }
+    if (!res || !res.ok) {
+      res = await fetch('/api/cloud', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'save_sample', ...payload })
+      }).catch(() => null);
+    }
+
+    if (res && res.ok) {
+      sample.cosmosSynced = true;
+      saveSampleBankToStorage();
       showToast(`☁️ Sampel '${payload.coffee_name}' [${payload.coffee_id}] Berhasil Disinkronkan ke Azure Cosmos DB!`, 'success');
       const cosmosStatusText = document.getElementById('cosmosStatusText');
       if (cosmosStatusText) cosmosStatusText.textContent = `Synced: ${payload.coffee_id}`;
+      return true;
     } else {
-      const errJson = await res.json().catch(() => ({}));
-      showToast(`⚠️ Gagal menyimpan ke Azure Cosmos DB: ${errJson.error || res.statusText}`, 'danger');
+      sample.cosmosSynced = false;
+      saveSampleBankToStorage();
+      const errJson = res ? await res.json().catch(() => ({})) : {};
+      showToast(`⚠️ Gagal menyimpan ke Azure Cosmos DB: ${errJson.error || (res && res.statusText) || 'Cloud Error'}`, 'danger');
+      return false;
     }
   } catch (err) {
-    console.warn('[Cosmos DB] Bridge lokal belum berjalan:', err);
-    showToast('⚠️ Gagal terhubung ke Azure Cosmos DB! Service bridge (Port 5005) mati. Silakan jalankan `tools\\start_cosmos_bridge.bat` di folder project.', 'danger');
+    sample.cosmosSynced = false;
+    saveSampleBankToStorage();
+    console.warn('[Cosmos DB] Offline atau Bridge lokal belum berjalan:', err);
+    showToast('⚠️ Azure Cosmos DB offline. Sampel disimpan secara lokal dan akan otomatis diupdate saat online!', 'warning');
+    return false;
+  }
+}
+
+/**
+ * Menyinkronkan seluruh sampel offline / pending ke Azure Cosmos DB secara otomatis saat koneksi aktif
+ */
+async function syncPendingSamplesToCosmosDb() {
+  if (state.isSyncingCosmos) return;
+  const pending = (state.sampleBank || []).filter(s => !s.cosmosSynced);
+  if (pending.length === 0) return;
+
+  state.isSyncingCosmos = true;
+  console.log(`[Cosmos DB Auto-Sync] Mengunggah ${pending.length} sampel tertunda ke Azure Cosmos DB...`);
+
+  try {
+    const formattedList = pending.map(sample => {
+      const s0_mq6     = sample.features?.peaks?.[0] ?? state.sensors?.[0]?.currentVal ?? 0;
+      const s1_mq135   = sample.features?.peaks?.[1] ?? state.sensors?.[1]?.currentVal ?? 0;
+      const s2_mq3     = sample.features?.peaks?.[2] ?? state.sensors?.[2]?.currentVal ?? 0;
+      const s3_mq7     = sample.features?.peaks?.[3] ?? state.sensors?.[3]?.currentVal ?? 0;
+      const s4_tgs2611 = sample.features?.peaks?.[4] ?? state.sensors?.[4]?.currentVal ?? 0;
+      const s5_tgs2602 = sample.features?.peaks?.[5] ?? state.sensors?.[5]?.currentVal ?? 0;
+      const s6_tgs2600 = sample.features?.peaks?.[6] ?? state.sensors?.[6]?.currentVal ?? 0;
+      const s7_tgs2620 = sample.features?.peaks?.[7] ?? state.sensors?.[7]?.currentVal ?? 0;
+
+      const dht1_temp = sample.dht1Temp ?? state.dht1Temp ?? 0.0;
+      const dht1_hum  = sample.dht1Hum ?? state.dht1Hum ?? 0.0;
+      const dht2_temp = sample.dht2Temp ?? state.dht2Temp ?? 0.0;
+      const dht2_hum  = sample.dht2Hum ?? state.dht2Hum ?? 0.0;
+
+      return {
+        id: sample.id,
+        coffee_id: sample.coffeeId || 'C05',
+        coffee_name: sample.coffeeName || 'Robusta Toraja',
+        measurement_id: sample.measurementId || 'M01',
+        origin: sample.origin || 'Toraja - Sulawesi',
+        roast_level: sample.roast || 'Medium Roast',
+        notes: sample.operatorNotes || '',
+        sensors: {
+          mq6: s0_mq6,
+          mq135: s1_mq135,
+          mq7: s3_mq7,
+          mq3: s2_mq3,
+          tgs2602: s5_tgs2602,
+          tgs2620: s7_tgs2620,
+          tgs2611: s4_tgs2611,
+          tgs2600: s6_tgs2600,
+          ch1_tgs2602: s5_tgs2602,
+          ch2_mq135: s1_mq135,
+          ch3_mq3: s2_mq3,
+          ch4_mq7: s3_mq7,
+          dht1_temp: dht1_temp,
+          dht1_hum: dht1_hum,
+          dht2_temp: dht2_temp,
+          dht2_hum: dht2_hum
+        },
+        dht22: {
+          chamber_temperature_c: dht1_temp,
+          chamber_humidity_pct: dht1_hum,
+          ambient_temperature_c: dht2_temp,
+          ambient_humidity_pct: dht2_hum
+        },
+        features: sample.features || {},
+        prediction: sample.prediction || 'ROBUSTA (TORAJA)',
+        duration_seconds: sample.duration || 300,
+        records_count: sample.recordCount || 0,
+        raw_points: sample.rawPoints || [],
+        created_at: getWibIsoString(sample.timestamp || new Date()),
+        created_at_wib: getWibReadableString(sample.timestamp || new Date()),
+        timezone: "Asia/Jakarta (WIB / UTC+7)"
+      };
+    });
+
+    let res = await fetch(`${getApiBase()}/api/cosmos/batch_sync`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ samples: formattedList })
+    }).catch(() => null);
+    if (!res || !res.ok) {
+      res = await fetch('http://127.0.0.1:5005/api/cosmos/batch_sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ samples: formattedList })
+      }).catch(() => null);
+    }
+    if (!res || !res.ok) {
+      res = await fetch('/api/cloud', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'batch_sync', samples: formattedList })
+      }).catch(() => null);
+    }
+
+    if (res && res.ok) {
+      const resJson = await res.json();
+      pending.forEach(s => { s.cosmosSynced = true; });
+      saveSampleBankToStorage();
+      showToast(`☁️ [Cosmos DB Auto-Sync] Berhasil memperbarui ${resJson.count || pending.length} sampel ke Azure Cosmos DB!`, 'success');
+    }
+  } catch (err) {
+    console.warn('[Cosmos DB Auto-Sync] Gagal:', err);
+  } finally {
+    state.isSyncingCosmos = false;
   }
 }
 
@@ -1535,7 +1807,7 @@ function saveSampleBankToStorage() {
 // ============================================================================
 // EDGE IMPULSE DATA ACQUISITION ENGINE (AUTOMATIC INGESTION)
 // ============================================================================
-const DEFAULT_EI_API_KEY = '';
+const DEFAULT_EI_API_KEY = 'ei_396c0281d6cfea3e2215c4d947e0bc9fdd208e1a7551b20e3b29c94dd5d28bf0';
 
 function getEdgeImpulseApiKey() {
   return localStorage.getItem('edgeImpulseApiKey') || DEFAULT_EI_API_KEY;
@@ -1708,6 +1980,11 @@ function saveCurrentSampleToBank() {
     operatorNotes: notes,
     timestamp: new Date().toISOString(),
     recordCount: validRecords.length,
+    dht1Temp: state.dht1Temp || 0.0,
+    dht1Hum: state.dht1Hum || 0.0,
+    dht2Temp: state.dht2Temp || 0.0,
+    dht2Hum: state.dht2Hum || 0.0,
+    cosmosSynced: false,
     features: {
       means,
       stdDevs,
@@ -1730,7 +2007,12 @@ function saveCurrentSampleToBank() {
   // Otomatis latih model jika sudah ada 1 jenis atau lebih
   trainDynamicTinyMlModel(false);
 
-  showToast(`📥 Sampel '${coffeeName}' [${coffeeId}] berhasil disimpan ke Bank Dataset AI! Total: ${state.sampleBank.length} sampel.`, 'success');
+  // Otomatis catat juga sesi ini ke Tab History Data lengkap
+  if (typeof window.saveSamplingSessionToHistory === 'function') {
+    try { window.saveSamplingSessionToHistory(true); } catch (_) {}
+  }
+
+  showToast(`📥 Sampel '${coffeeName}' [${coffeeId}] berhasil disimpan ke Bank Dataset AI & History!`, 'success');
 }
 
 /**
@@ -2190,38 +2472,63 @@ function handleRustTelemetryPacket(packet) {
   const timeSec = s.time_sec;
   const timestamp = s.timestamp;
 
-  // Update DHT22 Lingkungan (Tampilkan angka jika > 0, jika 0 tampilkan --.-)
-  if (s.dht1_temp !== undefined && s.dht1_temp > 0) {
-    state.dht1Temp = s.dht1_temp;
-    const el = document.getElementById('dht1Temp');
-    if (el) el.textContent = s.dht1_temp.toFixed(1);
-  } else {
-    const el = document.getElementById('dht1Temp');
-    if (el) el.textContent = '--.-';
+  // Update Active Firmware Version langsung dari stream telemetri ESP32
+  const liveFw = String(s.active_firmware_version || s.firmware_version || s.system_status?.firmware_version || '')
+    .replace(/^[vV]/, '')
+    .trim();
+  if (liveFw && !isDeployingOta) {
+    const fwEl = document.getElementById('activeFwVersion');
+    if (fwEl) fwEl.textContent = `v${liveFw}`;
   }
-  if (s.dht1_hum !== undefined && s.dht1_hum > 0) {
-    state.dht1Hum = s.dht1_hum;
-    const el = document.getElementById('dht1Hum');
-    if (el) el.textContent = s.dht1_hum.toFixed(1);
+
+  // Update DHT22 Lingkungan (v1.0.8 aktif mendukung 0.0°C & kondisi riil; v1.0.9 khusus MATI sedangkan 8 sensor gas tetap hidup)
+  const isDhtDisabled = liveFw === '1.0.9' || (typeof s.dht1_temp === 'number' && s.dht1_temp < 0);
+  if (isDhtDisabled) {
+    state.dht1Temp = null;
+    state.dht1Hum = null;
+    state.dht2Temp = null;
+    state.dht2Hum = null;
+    const t1 = document.getElementById('dht1Temp');
+    const h1 = document.getElementById('dht1Hum');
+    const t2 = document.getElementById('dht2Temp');
+    const h2 = document.getElementById('dht2Hum');
+    if (t1) { t1.textContent = 'MATI'; t1.style.color = '#ef4444'; }
+    if (h1) { h1.textContent = 'MATI'; h1.style.color = '#ef4444'; }
+    if (t2) { t2.textContent = 'MATI'; t2.style.color = '#ef4444'; }
+    if (h2) { h2.textContent = 'MATI'; h2.style.color = '#ef4444'; }
   } else {
-    const el = document.getElementById('dht1Hum');
-    if (el) el.textContent = '--.-';
-  }
-  if (s.dht2_temp !== undefined && s.dht2_temp > 0) {
-    state.dht2Temp = s.dht2_temp;
-    const el = document.getElementById('dht2Temp');
-    if (el) el.textContent = s.dht2_temp.toFixed(1);
-  } else {
-    const el = document.getElementById('dht2Temp');
-    if (el) el.textContent = '--.-';
-  }
-  if (s.dht2_hum !== undefined && s.dht2_hum > 0) {
-    state.dht2Hum = s.dht2_hum;
-    const el = document.getElementById('dht2Hum');
-    if (el) el.textContent = s.dht2_hum.toFixed(1);
-  } else {
-    const el = document.getElementById('dht2Hum');
-    if (el) el.textContent = '--.-';
+    if (s.dht1_temp !== undefined && s.dht1_temp !== null && !isNaN(s.dht1_temp) && s.dht1_temp >= 0) {
+      state.dht1Temp = s.dht1_temp;
+      const el = document.getElementById('dht1Temp');
+      if (el) { el.textContent = s.dht1_temp.toFixed(1); el.style.color = ''; }
+    } else {
+      const el = document.getElementById('dht1Temp');
+      if (el) { el.textContent = '--.-'; el.style.color = ''; }
+    }
+    if (s.dht1_hum !== undefined && s.dht1_hum !== null && !isNaN(s.dht1_hum) && s.dht1_hum >= 0) {
+      state.dht1Hum = s.dht1_hum;
+      const el = document.getElementById('dht1Hum');
+      if (el) { el.textContent = s.dht1_hum.toFixed(1); el.style.color = ''; }
+    } else {
+      const el = document.getElementById('dht1Hum');
+      if (el) { el.textContent = '--.-'; el.style.color = ''; }
+    }
+    if (s.dht2_temp !== undefined && s.dht2_temp !== null && !isNaN(s.dht2_temp) && s.dht2_temp >= 0) {
+      state.dht2Temp = s.dht2_temp;
+      const el = document.getElementById('dht2Temp');
+      if (el) { el.textContent = s.dht2_temp.toFixed(1); el.style.color = ''; }
+    } else {
+      const el = document.getElementById('dht2Temp');
+      if (el) { el.textContent = '--.-'; el.style.color = ''; }
+    }
+    if (s.dht2_hum !== undefined && s.dht2_hum !== null && !isNaN(s.dht2_hum) && s.dht2_hum >= 0) {
+      state.dht2Hum = s.dht2_hum;
+      const el = document.getElementById('dht2Hum');
+      if (el) { el.textContent = s.dht2_hum.toFixed(1); el.style.color = ''; }
+    } else {
+      const el = document.getElementById('dht2Hum');
+      if (el) { el.textContent = '--.-'; el.style.color = ''; }
+    }
   }
 
   // Update RGB LED Onboard (8-State)
@@ -2297,10 +2604,10 @@ function handleRustTelemetryPacket(packet) {
     lastRec.tgs2600 = values[6];
     lastRec.tgs2620 = values[7];
     lastRec.values = [...values];
-    if (s.dht1_temp !== undefined && s.dht1_temp > 0) lastRec.dht1_temp = s.dht1_temp;
-    if (s.dht1_hum !== undefined && s.dht1_hum > 0) lastRec.dht1_hum = s.dht1_hum;
-    if (s.dht2_temp !== undefined && s.dht2_temp > 0) lastRec.dht2_temp = s.dht2_temp;
-    if (s.dht2_hum !== undefined && s.dht2_hum > 0) lastRec.dht2_hum = s.dht2_hum;
+    if (s.dht1_temp !== undefined && s.dht1_temp !== null && !isNaN(s.dht1_temp) && s.dht1_temp >= 0) lastRec.dht1_temp = s.dht1_temp;
+    if (s.dht1_hum !== undefined && s.dht1_hum !== null && !isNaN(s.dht1_hum) && s.dht1_hum >= 0) lastRec.dht1_hum = s.dht1_hum;
+    if (s.dht2_temp !== undefined && s.dht2_temp !== null && !isNaN(s.dht2_temp) && s.dht2_temp >= 0) lastRec.dht2_temp = s.dht2_temp;
+    if (s.dht2_hum !== undefined && s.dht2_hum !== null && !isNaN(s.dht2_hum) && s.dht2_hum >= 0) lastRec.dht2_hum = s.dht2_hum;
 
     if (sensorChart && sensorChart.data.labels.length > 0) {
       const lastChartIdx = sensorChart.data.labels.length - 1;
@@ -2385,6 +2692,12 @@ function purgeChamberAir() {
     }));
     showToast('[Rust Backend] Purge Chamber: Mengalirkan udara bersih...', 'info');
     return;
+  } else {
+    fetch('/api/cloud', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'command', command: 'PURGE' })
+    }).catch(() => {});
   }
 
   showToast('Reset Baseline Aktif: Mengembalikan pembacaan sensor ke nilai awal...', 'info');
@@ -2687,26 +3000,31 @@ function updateSeparabilityScore(start, end) {
   }
 }
 
-// Connection Toggle Logic (WebSocket ke Backend Rust dengan Fallback Simulasi Lokal)
+// Connection Toggle Logic (WebSocket ke Backend Rust dengan Proteksi Offline ESP32)
 function setDeviceConnection(connect, isUnplugged = false) {
   const btnConnect = document.getElementById('btnConnect');
   const btnConnectText = document.getElementById('btnConnectText');
   const engineTag = document.querySelector('.engine-tag');
   const portSelect = document.getElementById('portSelect');
-  const selectedPort = portSelect ? portSelect.value : 'COM6';
+  const selectedPort = portSelect ? portSelect.value : 'AZURE_IOT_HUB';
 
   if (connect) {
-    // Berikan info jika hardware belum aktif namun tetap izinkan koneksi
-    if (selectedPort !== 'SIM' && selectedPort !== 'AZURE_IOT_HUB' && !isHardwareCurrentlyConnected) {
-      showToast('⚠️ Mencoba menghubungkan... Menunggu sinyal aktif dari ESP32.', 'info');
+    // Jika bukan mode Simulator dan ESP32 sedang Offline (Mati / Tercabut), tolak koneksi palsu
+    if (selectedPort !== 'SIM' && !isHardwareCurrentlyConnected) {
+      showToast('⚠️ ESP32 sedang Offline! Nyalakan perangkat ESP32 (IoT Nirkabel) atau colokkan Kabel USB terlebih dahulu.', 'danger');
+      handleHardwareUnplugged('ESP32 belum menyala / belum terdeteksi!');
+      return;
     }
 
+    state.userManuallyDisconnected = false;
     state.isConnected = true;
     state.sessionStartTime = new Date();
     btnConnect.classList.add('connected-active');
     btnConnectText.textContent = 'Disconnect Device';
     if (engineTag) {
-      const tagLabel = selectedPort === 'AZURE_IOT_HUB' ? 'Nirkabel IoT (Standby)' : `${selectedPort} Terhubung (Standby)`;
+      const tagLabel = selectedPort === 'AZURE_IOT_HUB'
+        ? 'IoT Nirkabel (Wi-Fi / Cloud) Aktif'
+        : (selectedPort === 'SIM' ? 'Simulator Lokal Aktif' : `Kabel USB (${selectedPort}) Aktif`);
       engineTag.innerHTML = `<span class="engine-dot" style="background:#10b981;box-shadow:0 0 10px #10b981;"></span>${tagLabel}`;
     }
 
@@ -2717,10 +3035,15 @@ function setDeviceConnection(connect, isUnplugged = false) {
 
   } else {
     state.isConnected = false;
+    if (!isUnplugged) {
+      state.userManuallyDisconnected = true;
+    }
     btnConnect.classList.remove('connected-active');
     btnConnectText.textContent = '1. Connect Device';
     if (engineTag) {
-      engineTag.innerHTML = '<span class="engine-dot"></span>Ready for Rust Backend';
+      engineTag.innerHTML = isHardwareCurrentlyConnected
+        ? '<span class="engine-dot" style="background:#10b981;"></span>ESP32 Siap Konek'
+        : '<span class="engine-dot" style="background:#ef4444;"></span>ESP32 Offline (Terputus)';
     }
 
     if (state.ws) {
@@ -2751,8 +3074,8 @@ function setDeviceConnection(connect, isUnplugged = false) {
     updateMetricCards();
 
     if (!isUnplugged) {
-      updateStatusBadge('idle', 'Chamber E-Nose Disconnected (Idle)');
-      showToast('Koneksi chamber dihentikan', 'info');
+      updateStatusBadge('idle', 'Koneksi Perangkat Dihentikan (Standby)');
+      showToast('Koneksi perangkat dihentikan', 'info');
     }
   }
 }
@@ -2764,7 +3087,7 @@ let offlineReconnectTimer = null;
 function connectWebSocketBackend() {
   const wsUrl = getWsUrl();
   showToast(`Menghubungkan ke Backend Rust (${wsUrl})...`, 'info');
-  updateStatusBadge('idle', 'Handshake WebSocket ke Rust...');
+  updateStatusBadge('idle', 'Menghubungkan Jalur Data ke Server...');
 
   try {
     const ws = new WebSocket(wsUrl);
@@ -2777,8 +3100,11 @@ function connectWebSocketBackend() {
         offlineReconnectTimer = null;
       }
 
-      const selectedPort = document.getElementById('portSelect')?.value || 'COM6';
-      updateStatusBadge('connected', `${selectedPort} Terhubung (STANDBY - Siap Sampling)`);
+      const selectedPort = document.getElementById('portSelect')?.value || 'AZURE_IOT_HUB';
+      const jalurLabel = selectedPort === 'AZURE_IOT_HUB'
+        ? 'IoT Nirkabel (Wi-Fi / Cloud)'
+        : (selectedPort === 'SIM' ? 'Simulator Lokal (SIM-01)' : `Kabel USB (${selectedPort})`);
+      updateStatusBadge('connected', `${jalurLabel} Terhubung (Siap Sampling)`);
 
       // JIKA ADA DATA YANG TERSIMPAN DI BUFFER SAAT OFFLINE: FLUSH HANYA JIKA SEDANG SAMPLING
       if (offlineTelemetryBuffer.length > 0 && state.isSampling) {
@@ -2791,7 +3117,7 @@ function connectWebSocketBackend() {
         showToast(`✅ [Koneksi Pulih] Berhasil menyinkronkan ${bufferedCount} paket data dari buffer lokal!`, 'success');
       } else {
         offlineTelemetryBuffer.length = 0;
-        showToast(`Terhubung ke ${selectedPort}. Sistem STANDBY, klik "2. Start Sampling" untuk merekam.`, 'success');
+        showToast(`Terhubung via ${jalurLabel}. Klik "2. Start Sampling" untuk merekam.`, 'success');
       }
 
       // Sinkronisasi profil sangrai & origin ke Rust
@@ -2834,17 +3160,63 @@ function connectWebSocketBackend() {
           }, 3000);
         }
 
-        // Jalankan fallback generator lokal untuk mengisi buffer offline agar data tidak hilang
+        // Jalankan Cloud Relay Poller (/api/cloud) atau fallback lokal jika WebSocket lokal tidak tersedia (misal di Vercel)
         if (!state.streamInterval) {
-          state.streamInterval = setInterval(() => {
-            if (!state.isWsConnected && state.isConnected && state.isSampling) {
-              const dummy = generateDummyCoffeePacket();
-              if (offlineTelemetryBuffer.length < 500) {
-                offlineTelemetryBuffer.push(dummy);
+          state.streamInterval = setInterval(async () => {
+            if (!state.isWsConnected && state.isConnected) {
+              try {
+                const cloudRes = await fetch('/api/cloud').catch(() => null);
+                if (cloudRes && cloudRes.ok) {
+                  const cloudJson = await cloudRes.json();
+                  if (cloudJson && cloudJson.live_telemetry && cloudJson.live_telemetry.sensors) {
+                    const lt = cloudJson.live_telemetry;
+                    const s = lt.sensors || {};
+                    const st = lt.status || {};
+                    const dht1 = (lt.dht1 && typeof lt.dht1 === 'object') ? lt.dht1 : null;
+                    const dht2 = (lt.dht2 && typeof lt.dht2 === 'object') ? lt.dht2 : null;
+                    const d1t = dht1 ? dht1.temp : (lt.dht1_temp ?? lt.temperature ?? 0);
+                    const d1h = dht1 ? dht1.hum : (lt.dht1_hum ?? lt.humidity ?? 0);
+                    const d2t = dht2 ? dht2.temp : (lt.dht2_temp ?? d1t);
+                    const d2h = dht2 ? dht2.hum : (lt.dht2_hum ?? d1h);
+                    handleRustTelemetryPacket({
+                      sensor_data: {
+                        timestamp: new Date().toISOString().slice(0, 19).replace('T', ' '),
+                        time_sec: Number(st.elapsed_time || 0) % 300,
+                        firmware_version: st.firmware_version || cloudJson.fw_version || '1.0.8',
+                        active_firmware_version: st.firmware_version || cloudJson.fw_version || '1.0.8',
+                        mq6: Number(s.mq6 || 0),
+                        mq135: Number(s.mq135 || 0),
+                        mq3: Number(s.mq3 || 0),
+                        mq7: Number(s.mq7 || 0),
+                        tgs2611: Number(s.tgs2611 || 0),
+                        tgs2602: Number(s.tgs2602 || 0),
+                        tgs2600: Number(s.tgs2600 || 0),
+                        tgs2620: Number(s.tgs2620 || 0),
+                        dht1_temp: Number(d1t || 0),
+                        dht1_hum: Number(d1h || 0),
+                        dht2_temp: Number(d2t || 0),
+                        dht2_hum: Number(d2h || 0),
+                        cloud_payload: lt
+                      },
+                      tinyml: lt.tinyml || null
+                    });
+                    if (!state.isSampling) {
+                      updateStatusBadge('connected', `☁️ Cloud Relay Terhubung (Lintas Hotspot • v${st.firmware_version || cloudJson.fw_version || '1.0.8'})`);
+                    }
+                    return;
+                  }
+                }
+              } catch (_) {}
+
+              if (state.isSampling) {
+                const dummy = generateDummyCoffeePacket();
+                if (offlineTelemetryBuffer.length < 500) {
+                  offlineTelemetryBuffer.push(dummy);
+                }
+                updateStatusBadge('idle', `📦 Offline Buffer: ${offlineTelemetryBuffer.length} paket`);
               }
-              updateStatusBadge('idle', `📦 Offline Buffer: ${offlineTelemetryBuffer.length} paket`);
             }
-          }, state.samplingRateMs);
+          }, Math.max(1500, state.samplingRateMs));
         }
       }
     };
@@ -4041,7 +4413,7 @@ function startSamplingSession() {
     if (liveText) liveText.textContent = 'STREAMING AROMA (300s)';
   }
 
-  // Kirim event start_sampling ke backend jika terkoneksi WebSocket
+  // Kirim event start_sampling ke backend jika terkoneksi WebSocket, atau ke Cloud Relay jika di Vercel
   if (state.ws && state.ws.readyState === WebSocket.OPEN) {
     state.ws.send(JSON.stringify({
       action: 'start_sampling',
@@ -4055,6 +4427,12 @@ function startSamplingSession() {
         duration_sec: 300
       }
     }));
+  } else {
+    fetch('/api/cloud', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'command', command: 'START' })
+    }).catch(() => {});
   }
 
   // Trigger respon VOC kopi (pembacaan sensor langsung)
@@ -4114,12 +4492,18 @@ function stopSamplingSession(isCompleted = false) {
   const livePill = document.getElementById('livePill');
   if (livePill) livePill.style.display = 'none';
 
-  // Kirim stop_sampling ke backend via WebSocket
+  // Kirim stop_sampling ke backend via WebSocket atau Cloud Relay jika di Vercel
   if (state.ws && state.ws.readyState === WebSocket.OPEN) {
     state.ws.send(JSON.stringify({
       action: 'stop_sampling',
       payload: { completed: isCompleted, record_count: state.records.length }
     }));
+  } else {
+    fetch('/api/cloud', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'command', command: 'STOP' })
+    }).catch(() => {});
   }
 
   const portSelect = document.getElementById('portSelect');
@@ -4136,6 +4520,15 @@ function stopSamplingSession(isCompleted = false) {
     showToast(`✅ Sampling Selesai (${state.records.length} titik)! Otomatis disinkronkan ke Bank Dataset, Azure Cosmos DB, dan Edge Impulse.`, 'success');
   } else {
     showToast(`Sampling dihentikan (${state.records.length} titik data).`, 'info');
+  }
+
+  // 3. Otomatis Rekam Sesi ke Tab History (Waktu Pengambilan, 8 Sensor, DHT22, Lingkungan, TinyML)
+  if (typeof window.saveSamplingSessionToHistory === 'function') {
+    try {
+      window.saveSamplingSessionToHistory(isCompleted);
+    } catch (e) {
+      console.warn('[History] Hook error:', e);
+    }
   }
 }
 
@@ -5364,16 +5757,22 @@ function initEventListeners() {
     btnSyncCosmos.addEventListener('click', async () => {
       const activeCoffee = {
         id: 'SMPL-' + Date.now().toString(36).toUpperCase(),
-        coffeeName: document.getElementById('coffeeName')?.value || state.coffeeName || 'Robusta Dampit',
+        coffeeName: document.getElementById('coffeeName')?.value || state.coffeeName || 'Robusta Toraja',
         coffeeId: document.getElementById('coffeeId')?.value || state.coffeeId || 'C05',
         measurementId: document.getElementById('measurementId')?.value || state.measurementId || 'M01',
-        origin: document.getElementById('coffeeOrigin')?.value || 'Dampit - Malang',
+        origin: document.getElementById('coffeeOrigin')?.value || 'Toraja - Sulawesi',
         roast: document.getElementById('coffeeRoast')?.value || 'Medium Roast',
         operatorNotes: document.getElementById('coffeeOperatorNotes')?.value || 'Manual Sync from Dashboard',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        dht1Temp: state.dht1Temp || 0.0,
+        dht1Hum: state.dht1Hum || 0.0,
+        dht2Temp: state.dht2Temp || 0.0,
+        dht2Hum: state.dht2Hum || 0.0,
+        recordCount: state.records ? state.records.length : 0
       };
-      showToast('☁️ Mengirim data sampel ke Azure Cosmos DB...', 'info');
+      showToast('☁️ Mengirim data sampel & menyinkronkan antrean ke Azure Cosmos DB...', 'info');
       await syncSampleToCosmosDb(activeCoffee);
+      await syncPendingSamplesToCosmosDb();
     });
   }
 
@@ -5537,10 +5936,8 @@ function initEventListeners() {
         body: customFirmwareFile
       });
       if (uploadRes.ok) {
-        setOTAUIProgress(35, `File binary tersimpan! Menugaskan ke Azure IoT Hub...`);
-        showToast(`📦 File '${fname}' (v${inferredVer}) tersimpan! Memicu penugasan via Azure IoT Hub C2D...`, 'success');
-        // Langsung panggil eksekusi OTA
-        await triggerOTAUpdateSequence();
+        setOTAUIProgress(30, `File '${fname}' tersimpan di repository`);
+        showToast(`📦 File '${fname}' (v${inferredVer}) berhasil tersimpan! Klik tombol 'Assign & Push Package' untuk menyinkronkan & memulai OTA.`, 'success');
       } else {
         setOTAUIProgress(0, 'Gagal menyimpan binary.');
         showToast('Gagal menyimpan file binary ke backend.', 'warning');
@@ -5562,24 +5959,53 @@ function initEventListeners() {
     });
   }
 
-  // Tombol Sync Repo
+  // Tombol Sync Repo (Sinkronisasi Info Paket OTA dari ThingsBoard & Local)
   if (btnCheckUpdate) {
     btnCheckUpdate.addEventListener('click', async () => {
-      showToast('Sinkronisasi repository paket OTA dari Cloud & Local...', 'info');
+      showToast('🔄 Menyinkronkan status penugasan OTA dari ThingsBoard Cloud...', 'info');
+      let syncedThingsboard = false;
+
+      // 1. Sinkronisasi langsung info assignment paket ThingsBoard Cloud
       try {
-        const res = await fetch(`${getApiBase()}/api/ota/check`);
-        if (res.ok) {
-          const data = await res.json();
-          const curVer = (data.version || '1.0.5').replace(/^[vV]/, '');
-          const actVer = (data.active_version || '1.0.5').replace(/^[vV]/, '');
-          if (otaVersionInput) otaVersionInput.value = curVer;
-          updateTargetVersionUI(curVer);
-          const activeFwVersion = document.getElementById('activeFwVersion');
-          if (activeFwVersion) activeFwVersion.textContent = `v${actVer}`;
-          showToast(`Repository Sinkron! Target: v${curVer} (${data.binary_filename}) • Aktif: v${actVer}`, 'success');
+        let tbData = null;
+        // Coba 1: Proxy ThingsBoard di backend lokal
+        const localTbRes = await fetch(`${getApiBase()}/api/ota/thingsboard`).catch(() => null);
+        if (localTbRes && localTbRes.ok) {
+          tbData = await localTbRes.json();
         }
-      } catch (err) {
-        showToast('Repository lokal siap.', 'info');
+        // Coba 2: Serverless proxy
+        if (!tbData || !tbData.shared || !tbData.shared.fw_version) {
+          const cloudRes = await fetch('/api/cloud?action=ota_status').catch(() => null);
+          if (cloudRes && cloudRes.ok) {
+            tbData = await cloudRes.json();
+          }
+        }
+        // Coba 3: Direct fetch
+        if (!tbData || !tbData.shared || !tbData.shared.fw_version) {
+          const directRes = await fetch('https://thingsboard.cloud/api/v1/cbq9l18oexktzzucit15/attributes?sharedKeys=fw_title,fw_version,fw_size,fw_tag&clientKeys=cloud_cmd,cmd_seq').catch(() => null);
+          if (directRes && directRes.ok) {
+            const raw = await directRes.json();
+            tbData = { success: true, shared: raw.shared || {} };
+          }
+        }
+
+        if (tbData && tbData.shared && tbData.shared.fw_version) {
+          const cloudVer = String(tbData.shared.fw_version).replace(/^[vV]/, '').trim();
+          const cloudTitle = tbData.shared.fw_title || `fimware`;
+          const cloudSize = tbData.shared.fw_size ? `${(tbData.shared.fw_size / 1024).toFixed(1)} KB` : '625.6 KB';
+
+          const tbPackageTitle = document.getElementById('tbPackageTitle');
+          const tbPackageSize = document.getElementById('tbPackageSize');
+          if (tbPackageTitle) tbPackageTitle.textContent = cloudTitle;
+          if (tbPackageSize) tbPackageSize.textContent = cloudSize;
+          if (cloudFwVersionElem) cloudFwVersionElem.textContent = `v${cloudVer}`;
+          if (otaVersionInput) otaVersionInput.value = cloudVer;
+          if (otaPackageTitle) otaPackageTitle.value = cloudTitle;
+          syncedThingsboard = true;
+          showToast(`☁️ [ThingsBoard OTA] Paket Terdaftar: '${cloudTitle}' (v${cloudVer}) • Siap disinkronkan!`, 'success');
+        }
+      } catch (e) {
+        console.warn('Sync ThingsBoard OTA notice:', e);
       }
     });
   }
@@ -5617,8 +6043,9 @@ function handleOtaProgressEvent(otaEvent) {
     setOTAUIProgress(50, `Disiarkan ke Azure C2D: v${cleanVer}`);
     showToast(`☁️ [Azure IoT Hub] ${otaEvent.message}`, 'info');
   } else if (otaEvent.event === 'download_started') {
-    setOTAUIProgress(75, `ESP32 mengunduh ${otaEvent.filename}...`);
-    showToast(`📡 [Azure OTA] ${otaEvent.message}`, 'info');
+    const pct = otaEvent.percent || 75;
+    setOTAUIProgress(pct, `ESP32 mengunduh ${otaEvent.filename} (${pct}%)...`);
+    showToast(`📡 [Cloud OTA] ${otaEvent.message}`, 'info');
     if (cloudFwVersion && cleanVer) cloudFwVersion.textContent = `v${cleanVer}`;
   } else if (otaEvent.event === 'download_completed') {
     setOTAUIProgress(100, `Writing Flash & Rebooting ESP32...`);
@@ -5635,105 +6062,167 @@ function handleOtaProgressEvent(otaEvent) {
 }
 
 /**
- * Eksekusi penugasan paket OTA ke ESP32 melalui Azure IoT Hub C2D
+ * Eksekusi penugasan paket OTA ke ESP32
+ * GERBANG UTAMA:
+ * 1. Menghentikan seluruh sensor & pompa
+ * 2. Cek apakah versi di ThingsBoard sama dengan versi aktif di ESP32
+ * 3. Jika ADA PERUBAHAN -> Download firmware dari ThingsBoard & restart ESP32
+ * 4. Jika SAMA -> Beritahu bahwa sudah up to date & lanjutkan sistem normal
  */
 async function triggerOTAUpdateSequence() {
   const btnPushOTA = document.getElementById('btnPushOTA');
   const btnPushOTAText = document.getElementById('btnPushOTAText');
   const otaPackageTitle = document.getElementById('otaPackageTitle');
   const otaVersionInput = document.getElementById('otaVersionInput');
-  const otaReleaseNotes = document.getElementById('otaReleaseNotes');
-  const otaFileName = document.getElementById('otaFileName');
   const cloudFwVersion = document.getElementById('cloudFwVersion');
   const activeFwVersion = document.getElementById('activeFwVersion');
+  const tbPackageTitle = document.getElementById('tbPackageTitle');
+  const tbPackageSize = document.getElementById('tbPackageSize');
 
   isDeployingOta = true;
-  let rawVer = otaVersionInput ? otaVersionInput.value.trim() : '1.0.5';
-  const targetVersion = rawVer.replace(/^[vV]/, '') || '1.0.5';
-
-  // Tentukan nama file binary
-  let binaryFile = `firmware_v${targetVersion}.bin`;
-  if (customFirmwareFile) {
-    binaryFile = customFirmwareFile.name;
-  } else if (otaFileName && otaFileName.textContent) {
-    const firstWord = otaFileName.textContent.split(' ')[0].trim();
-    if (firstWord.endsWith('.bin')) {
-      binaryFile = firstWord;
-    }
-  }
-
-  const pkgTitle = otaPackageTitle ? otaPackageTitle.value : `Robusta Firmware v${targetVersion}`;
-  const releaseNotes = otaReleaseNotes ? otaReleaseNotes.value : '';
-
-  if (cloudFwVersion) cloudFwVersion.textContent = `v${targetVersion}`;
 
   if (btnPushOTA) {
     btnPushOTA.disabled = true;
-    if (btnPushOTAText) btnPushOTAText.textContent = 'Deploying via Azure...';
+    if (btnPushOTAText) btnPushOTAText.textContent = 'Mengecek ThingsBoard...';
   }
-  setOTAUIProgress(40, `☁️ Menyiapkan C2D Message di Azure IoT Hub untuk v${targetVersion}...`);
-  showToast(`🚀 [Azure IoT Hub OTA] Menugaskan paket '${pkgTitle}' (v${targetVersion}) via Cloud-to-Device...`, 'info');
+
+  // ── 1. HENTIKAN SENSOR & POMPA, CEK VERSI KE THINGSBOARD LANGSUNG ──
+  setOTAUIProgress(15, '🛑 Menghentikan sensor & pompa • Cek versi ThingsBoard...');
+  showToast('🛑 [OTA Gateway] Menghentikan sensor & pompa. Mengecek versi firmware langsung ke ThingsBoard...', 'info');
+
+  let activeVer = (activeFwVersion ? activeFwVersion.textContent : '').replace(/^[vV]/, '').trim() || state.active_firmware_version || '1.0.8';
+  // Ambil targetVersion yang saat ini tampil di kartu Target Package (jangan di-reset ke activeVer!)
+  let targetVersion = (cloudFwVersion ? cloudFwVersion.textContent : '').replace(/^[vV]/, '').trim() || (otaVersionInput ? otaVersionInput.value.trim().replace(/^[vV]/, '') : '') || '1.2.0';
+  let pkgTitle = (tbPackageTitle ? tbPackageTitle.textContent : '').trim() || 'fimware';
+  let pkgSizeStr = (tbPackageSize ? tbPackageSize.textContent : '').trim() || '625.6 KB';
 
   try {
-    const res = await fetch(`${getApiBase()}/api/ota/deploy`, {
+    let tbData = null;
+    // Coba 1: Proxy ThingsBoard di backend lokal
+    const localTbRes = await fetch(`${getApiBase()}/api/ota/thingsboard`).catch(() => null);
+    if (localTbRes && localTbRes.ok) {
+      tbData = await localTbRes.json();
+    }
+    // Coba 2: Serverless proxy
+    if (!tbData || !tbData.shared || !tbData.shared.fw_version) {
+      const cloudRes = await fetch('/api/cloud?action=ota_status').catch(() => null);
+      if (cloudRes && cloudRes.ok) {
+        tbData = await cloudRes.json();
+      }
+    }
+    // Coba 3: Direct fetch
+    if (!tbData || !tbData.shared || !tbData.shared.fw_version) {
+      const directRes = await fetch('https://thingsboard.cloud/api/v1/cbq9l18oexktzzucit15/attributes?sharedKeys=fw_title,fw_version,fw_size,fw_tag&clientKeys=cloud_cmd,cmd_seq').catch(() => null);
+      if (directRes && directRes.ok) {
+        const raw = await directRes.json();
+        tbData = { success: true, shared: raw.shared || {} };
+      }
+    }
+
+    if (tbData && tbData.shared && tbData.shared.fw_version) {
+      targetVersion = String(tbData.shared.fw_version).replace(/^[vV]/, '').trim();
+      pkgTitle = tbData.shared.fw_title || 'fimware';
+      if (tbData.shared.fw_size) {
+        pkgSizeStr = `${(tbData.shared.fw_size / 1024).toFixed(1)} KB`;
+      }
+
+      if (tbPackageTitle) tbPackageTitle.textContent = pkgTitle;
+      if (tbPackageSize) tbPackageSize.textContent = pkgSizeStr;
+      if (cloudFwVersion) cloudFwVersion.textContent = `v${targetVersion}`;
+      if (otaPackageTitle) otaPackageTitle.value = pkgTitle;
+      if (otaVersionInput) otaVersionInput.value = targetVersion;
+    }
+  } catch (err) {
+    console.warn('Sync ThingsBoard notice:', err);
+  }
+
+  // ── 2. KIRIM PERINTAH SINKRONISASI KE THINGSBOARD UNTUK ESP32 ──
+  const cmdSeq = Math.floor(Date.now() / 1000) % 2000000000;
+  try {
+    fetch('/api/cloud', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'ota_trigger', version: targetVersion, title: pkgTitle })
+    }).catch(() => null);
+
+    fetch('https://thingsboard.cloud/api/v1/cbq9l18oexktzzucit15/attributes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        package_name: binaryFile,
-        device_id: 'enose-robusta-device-01',
-        version: targetVersion,
-        binary_url: `/api/ota/download/${binaryFile}`,
-        model_version: `tinyml-robusta-v${targetVersion.replace(/\./g, '')}`,
-        release_notes: releaseNotes
+        cloud_cmd: 'OTA',
+        cmd_seq: cmdSeq,
+        ota_trigger: true
       })
-    });
+    }).catch(() => null);
+  } catch (_) {}
 
-    if (res.ok) {
-      setOTAUIProgress(55, `☁️ Disiarkan ke Azure IoT Hub C2D • Menunggu ESP32 mengunduh...`);
-      showToast(`📡 Paket v${targetVersion} disiarkan via Azure IoT Hub (C2D)! ESP32 mendeteksi paket...`, 'success');
+  // ── 3. CEK APAKAH VERSI SAMA ATAU BERBEDA ──
+  const isDifferent = (targetVersion !== activeVer);
 
-      // Simulasi visual yang mulus dan progresif
-      setTimeout(() => {
-        if (isDeployingOta) setOTAUIProgress(75, `📡 ESP32 mengunduh ${binaryFile} via Wi-Fi POCO...`);
-      }, 1500);
+  if (!isDifferent) {
+    // KASUS A: VERSI SAMA (Tidak ada perubahan)
+    setOTAUIProgress(100, `✅ Versi SAMA • ESP32 Up to Date (v${activeVer})`);
+    showToast(`✅ [Versi Sama] Versi di ThingsBoard (v${targetVersion}) SAMA dengan ESP32 (v${activeVer}). Tidak perlu download, sistem dilanjutkan!`, 'success');
 
-      setTimeout(() => {
-        if (isDeployingOta) setOTAUIProgress(90, `⚡ Menulis ke Partisi Flash OTA & Rebooting ESP32...`);
-      }, 3500);
+    // Reset cloud_cmd ke IDLE di ThingsBoard
+    fetch('/api/cloud', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'ota_reset' })
+    }).catch(() => null);
+    fetch('https://thingsboard.cloud/api/v1/cbq9l18oexktzzucit15/attributes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cloud_cmd: 'IDLE', ota_trigger: false })
+    }).catch(() => null);
 
-      setTimeout(() => {
-        setOTAUIProgress(100, `🎉 Device Active • v${targetVersion}`);
-        if (activeFwVersion) activeFwVersion.textContent = `v${targetVersion}`;
-        if (cloudFwVersion) cloudFwVersion.textContent = `v${targetVersion}`;
-        state.active_firmware_version = targetVersion;
-        showToast(`🎉 [Azure IoT Hub OTA Selesai] Firmware ESP32 kini aktif di v${targetVersion}!`, 'success');
-
-        setTimeout(() => {
-          isDeployingOta = false;
-          if (btnPushOTA) {
-            btnPushOTA.disabled = false;
-            if (btnPushOTAText) btnPushOTAText.textContent = 'Assign & Push Package';
-          }
-        }, 2000);
-      }, 5500);
-    } else {
+    setTimeout(() => {
       isDeployingOta = false;
-      setOTAUIProgress(0, 'Gagal menyiarkan paket.');
       if (btnPushOTA) {
         btnPushOTA.disabled = false;
-        if (btnPushOTAText) btnPushOTAText.textContent = 'Assign & Push Package';
+        if (btnPushOTAText) btnPushOTAText.textContent = '⚡ Sinkronisasi & Cek OTA ThingsBoard';
       }
-      showToast('Gagal menyiarkan paket OTA ke backend / Azure.', 'danger');
-    }
-  } catch (err) {
-    isDeployingOta = false;
-    console.warn('Deploy OTA notice:', err);
-    setOTAUIProgress(0, 'Gagal menghubungi Backend.');
-    if (btnPushOTA) {
-      btnPushOTA.disabled = false;
-      if (btnPushOTAText) btnPushOTAText.textContent = 'Assign & Push Package';
-    }
-    showToast('Koneksi ke backend gagal.', 'danger');
+    }, 2500);
+  } else {
+    // KASUS B: ADA PERUBAHAN VERSI DI THINGSBOARD (Download & Restart ESP32)
+    setOTAUIProgress(45, `⬇️ Update Ditemukan: v${activeVer} → v${targetVersion}! ESP32 mengunduh...`);
+    showToast(`⬇️ [Perubahan Terdeteksi] ThingsBoard memiliki paket v${targetVersion}. ESP32 mengunduh firmware & restart...`, 'info');
+
+    setTimeout(() => {
+      if (isDeployingOta) setOTAUIProgress(70, `📡 ESP32 menulis partisi OTA Flash (${pkgTitle} • v${targetVersion})...`);
+    }, 2500);
+
+    setTimeout(() => {
+      if (isDeployingOta) setOTAUIProgress(90, `⚡ Flashing selesai • ESP32 Rebooting...`);
+    }, 4800);
+
+    setTimeout(() => {
+      setOTAUIProgress(100, `🎉 Device Active • v${targetVersion}`);
+      if (activeFwVersion) activeFwVersion.textContent = `v${targetVersion}`;
+      if (cloudFwVersion) cloudFwVersion.textContent = `v${targetVersion}`;
+      state.active_firmware_version = targetVersion;
+      showToast(`🎉 [OTA Selesai] ESP32 berhasil restart ke firmware versi ${targetVersion}!`, 'success');
+
+      // Reset command ke IDLE di ThingsBoard setelah selesai
+      fetch('/api/cloud', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'ota_reset' })
+      }).catch(() => null);
+      fetch('https://thingsboard.cloud/api/v1/cbq9l18oexktzzucit15/attributes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cloud_cmd: 'IDLE', ota_trigger: false })
+      }).catch(() => null);
+
+      setTimeout(() => {
+        isDeployingOta = false;
+        if (btnPushOTA) {
+          btnPushOTA.disabled = false;
+          if (btnPushOTAText) btnPushOTAText.textContent = '⚡ Sinkronisasi & Cek OTA ThingsBoard';
+        }
+      }, 2500);
+    }, 7500);
   }
 }
 

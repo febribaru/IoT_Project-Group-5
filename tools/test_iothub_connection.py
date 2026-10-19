@@ -7,22 +7,12 @@ import hmac
 import hashlib
 import time
 import urllib.parse
-import os
 import requests
 
-def _load_dotenv():
-    env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
-    if os.path.exists(env_path):
-        with open(env_path, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    k, v = line.split("=", 1)
-                    os.environ.setdefault(k.strip(), v.strip())
+import os
 
 def test_iothub():
-    _load_dotenv()
-    connection_string = os.getenv("AZURE_DEVICE_CONNECTION_STRING", "")
+    connection_string = os.getenv("AZURE_DEVICE_CONNECTION_STRING", "HostName=enose-robusta-hub123.azure-devices.net;DeviceId=enose-robusta-device-01;SharedAccessKey=YOUR_AZURE_IOTHUB_KEY")
     
     # Parse connection string
     parts = dict(part.split('=', 1) for part in connection_string.split(';') if '=' in part)

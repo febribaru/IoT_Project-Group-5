@@ -3,6 +3,8 @@ members = [
     "backend"
 ]
 exclude = [
-    "esp32"
+    "esp32",
+    "esp32_no_std",
+    "esp32_legacy_backup"
 ]
 resolver = "2"

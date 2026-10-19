@@ -1,19 +1,8 @@
+import os
 import datetime
 import json
-import os
 from azure.cosmos import CosmosClient, PartitionKey, exceptions
 
-def _load_dotenv():
-    env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
-    if os.path.exists(env_path):
-        with open(env_path, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    k, v = line.split("=", 1)
-                    os.environ.setdefault(k.strip(), v.strip())
-
-_load_dotenv()
 ENDPOINT = os.getenv("AZURE_COSMOS_ENDPOINT", "https://enose.documents.azure.com:443/")
 KEY = os.getenv("AZURE_COSMOS_KEY", "")
 DATABASE_NAME = os.getenv("AZURE_COSMOS_DATABASE", "enose_db")

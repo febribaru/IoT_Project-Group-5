@@ -1,0 +1,69 @@
+[package]
+name = "esp32-coffee"
+version = "0.1.0"
+edition = "2021"
+description = "Electronic Nose ESP32-S3 Bare-Metal (no_std) Firmware"
+authors = ["Electronic Nose Team"]
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+esp-hal = { version = "1.2.1", features = ["esp32s3", "unstable"] }
+esp-backtrace = { version = "0.15.0", features = ["esp32s3", "panic-handler", "println"] }
+esp-println = { version = "0.13.0", features = ["esp32s3"] }
+esp-bootloader-esp-idf = { version = "0.6.0", features = ["esp32s3"] }
+dht-sensor = "0.2.1"
+embedded-hal = { version = "0.2.7", features = ["unproven"] }
+heapless = { version = "0.8", default-features = false }
+serde = { version = "1.0", default-features = false, features = ["derive"] }
+serde-json-core = { version = "0.5", default-features = false }
+libm = "0.2"
+esp-hal-smartled = { version = "0.18.0", features = ["esp32s3"] }
+smart-leds = "0.4.0"
+esp-alloc = { git = "https://github.com/esp-rs/esp-hal", tag = "esp-hal-v1.2.1", version = "0.11.0", features = ["esp32s3"] }
+esp-storage = { git = "https://github.com/esp-rs/esp-hal", tag = "esp-hal-v1.2.1", features = ["esp32s3"] }
+esp-rtos = { git = "https://github.com/esp-rs/esp-hal", tag = "esp-hal-v1.2.1", version = "0.4.0", features = ["esp32s3", "esp-radio", "esp-alloc", "embassy"] }
+esp-radio = { git = "https://github.com/esp-rs/esp-hal", tag = "esp-hal-v1.2.1", version = "1.0.0-beta.0", features = ["esp32s3", "wifi"] }
+embassy-executor = "0.10.0"
+embassy-net = { version = "0.9.0", features = [
+    "dhcpv4",
+    "medium-ethernet",
+    "tcp",
+    "udp",
+    "dns",
+] }
+embassy-time = "0.5.0"
+static_cell = "2.1.0"
+
+[features]
+default = ["v108"]
+v101 = []
+v102 = []
+v103 = []
+v104 = []
+v105 = []
+v106 = []
+v107 = []
+v108 = []
+v109 = []
+v110 = []
+v120 = []
+
+[profile.dev]
+opt-level = "s"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+
+[workspace]
+
+[patch.crates-io]
+esp-bootloader-esp-idf = { git = "https://github.com/esp-rs/esp-hal", tag = "esp-hal-v1.2.1" }
+esp-rom-sys = { git = "https://github.com/esp-rs/esp-hal", tag = "esp-hal-v1.2.1" }
+esp-hal = { git = "https://github.com/esp-rs/esp-hal", tag = "esp-hal-v1.2.1" }
+esp-storage = { git = "https://github.com/esp-rs/esp-hal", tag = "esp-hal-v1.2.1" }
+esp-alloc = { git = "https://github.com/esp-rs/esp-hal", tag = "esp-hal-v1.2.1" }
+esp-rtos = { git = "https://github.com/esp-rs/esp-hal", tag = "esp-hal-v1.2.1" }
+esp-radio = { git = "https://github.com/esp-rs/esp-hal", tag = "esp-hal-v1.2.1" }

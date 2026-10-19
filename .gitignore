@@ -1,24 +1,40 @@
-# Rust / Cargo build artifacts
+# Rust build artifacts
 target/
 **/target/
-*.exe
-*.pdb
-*.bin
 
-# Environment variables & secrets (DO NOT COMMIT SECRETS)
+# Executables & Binaries
+*.exe
+**/*.exe
+*.pdb
+**/*.pdb
+
+# Environment variables & secrets
 .env
-*.env
-!*.env.example
+**/.env
+.env.*
+**/.env.*
+
+# Large Backup & Legacy folders
+esp32_legacy_backup/
+*.zip
+*.tar.gz
 
 # Python cache
 __pycache__/
 **/__pycache__/
 *.pyc
 
-
-# OS & Editor files
-.DS_Store
-Thumbs.db
+# IDE and Editor files
 .vscode/
+**/.vscode/
 .idea/
-*.swp
+**/.idea/
+
+# Logs
+*.log
+**/*.log
+dataset/logs/
+
+# OS specific files
+Thumbs.db
+.DS_Store

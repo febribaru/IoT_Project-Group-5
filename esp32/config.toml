@@ -1,0 +1,19 @@
+# .cargo/config.toml
+# Target: ESP32-S2 / ESP32-S3 (Xtensa LX7) — change to xtensa-esp32-espidf for original ESP32
+
+[build]
+target = "xtensa-esp32s3-espidf"  # Change to xtensa-esp32-espidf if using original ESP32
+
+[target.xtensa-esp32s3-espidf]
+linker = "ldproxy"
+runner = "espflash flash --monitor"
+rustflags = ["--cfg", "espidf_time64"]
+
+[target.xtensa-esp32-espidf]
+linker = "ldproxy"
+runner = "espflash flash --monitor"
+rustflags = ["--cfg", "espidf_time64"]
+
+[env]
+ESP_IDF_VERSION    = "v5.2.1"
+MCU                = "esp32s3"

@@ -1,29 +1,33 @@
 /*
  * ============================================================================
- * 🧪 ELECTRONIC NOSE (E-NOSE) - ARDUINO C++ VERSION
- * ESP32-S3 Firmware: Sensor + L298N + Desktop GUI Serial + ThingsBoard MQTT
+ * 🧪 ELECTRONIC NOSE (E-NOSE) - ARDUINO C++ CLOUD VERSION
+ * ESP32-S3 Firmware: Sensor + L298N + Desktop GUI Serial + Vercel Cloud HTTPS
  * ============================================================================
+ *
+ * Target Deployment:
+ * - Vercel Serverless Gateway: https://iotproject-kappa.vercel.app/api/cloud
+ * - Database: Azure Cosmos DB (enose_db / telemetry)
+ * - Antarmuka: Web Dashboard Vercel & USB Serial GUI
  *
  * Library yang dibutuhkan (Install via Library Manager di Arduino IDE):
  * 1. Adafruit ADS1X15 by Adafruit
  * 2. DHT sensor library by Adafruit + Adafruit Unified Sensor
- * 3. PubSubClient by Nick O'Leary (atau ThingsBoard by ThingsBoard Team)
- * 4. ArduinoJson by Benoit Blanchon
+ * 3. ArduinoJson by Benoit Blanchon (opsional untuk parser payload)
  */
 
 #include <WiFi.h>
-#include <PubSubClient.h>
+#include <HTTPClient.h>
+#include <WiFiClientSecure.h>
 #include <Wire.h>
 #include <Adafruit_ADS1X15.h>
 #include <DHT.h>
 #include <ArduinoJson.h>
 
-// ─── 1. KONFIGURASI WI-FI & THINGSBOARD ──────────────────────────────────────
-const char* WIFI_SSID = "YOUR_WIFI_SSID";
-const char* WIFI_PASS = "YOUR_WIFI_PASSWORD";
-const char* TB_HOST   = "192.168.1.100";  // Ganti IP/Host ThingsBoard Anda (tanpa http/mqtt prefix)
-const int   TB_PORT   = 1883;
-const char* TB_TOKEN  = "YOUR_DEVICE_ACCESS_TOKEN";
+// ─── 1. KONFIGURASI WI-FI & VERCEL CLOUD GATEWAY ─────────────────────────────
+// Ganti nama Wi-Fi & Password sesuai Hotspot HP atau Wi-Fi Anda
+const char* WIFI_SSID  = "POCO";                     // Ganti dengan SSID Wi-Fi / Hotspot Anda
+const char* WIFI_PASS  = "12345678";                 // Ganti dengan Password Wi-Fi Anda
+const char* VERCEL_URL = "https://iotproject-kappa.vercel.app/api/cloud";
 
 // ─── 2. PINOUT HARDWARE ESP32-S3 ─────────────────────────────────────────────
 #define PIN_SDA         8
@@ -47,15 +51,12 @@ const char* TB_TOKEN  = "YOUR_DEVICE_ACCESS_TOKEN";
 #define PIN_ENA_B       2
 #define PIN_ENB_B       21
 
-// ─── 3. OBJEK DRIVER ─────────────────────────────────────────────────────────
-Adafruit_ADS1115 ads1; // Alamat 0x48 (MQ Sensors)
-Adafruit_ADS1115 ads2; // Alamat 0x49 (TGS Sensors)
+// ─── 3. OBJEK DRIVER & SENSOR ────────────────────────────────────────────────
+Adafruit_ADS1115 ads1; // Alamat 0x48 (MQ-6, MQ-135, MQ-3, MQ-7)
+Adafruit_ADS1115 ads2; // Alamat 0x49 (TGS-2611, TGS-2602, TGS-2600, TGS-2620)
 
 DHT dht1(PIN_DHT1, DHT22);
 DHT dht2(PIN_DHT2, DHT22);
-
-WiFiClient espClient;
-PubSubClient mqttClient(espClient);
 
 // ─── 4. STATE SISTEM & TIMING ────────────────────────────────────────────────
 bool system_running   = false;
@@ -71,7 +72,7 @@ struct SensorData {
   float dht2_temp, dht2_hum;
 } sensors;
 
-// ─── 5. FUNGSI KONTROL MOTOR DRIVER ──────────────────────────────────────────
+// ─── 5. FUNGSI KONTROL MOTOR DRIVER (POMPA & VALVE) ──────────────────────────
 void stopDriverA() {
   digitalWrite(PIN_IN1_A, LOW);
   digitalWrite(PIN_IN2_A, LOW);
@@ -170,7 +171,7 @@ void readSensors() {
   if (!isnan(h2)) sensors.dht2_hum  = h2;
 }
 
-// ─── 8. TRANSMISI DATA SERIAL (GUI RUST) & THINGSBOARD ───────────────────────
+// ─── 8. TRANSMISI DATA SERIAL USB (UNTUK DESKTOP GUI & DEBUGGING) ────────────
 void sendSerialJson() {
   Serial.printf(
     "{\"sensors\":{\"mq6\":%.2f,\"mq135\":%.2f,\"mq3\":%.2f,\"mq7\":%.2f,"
@@ -188,37 +189,48 @@ void sendSerialJson() {
   );
 }
 
-void sendThingsBoardTelemetry() {
-  if (!mqttClient.connected()) return;
+// ─── 9. TRANSMISI TELEMETRI HTTPS LANGSUNG KE VERCEL CLOUD ──────────────────
+void sendVercelTelemetry() {
+  if (WiFi.status() != WL_CONNECTED) return;
 
-  char payload[384];
+  WiFiClientSecure client;
+  client.setInsecure(); // Mengabaikan validasi sertifikat CA agar handshake SSL ringan
+  client.setTimeout(3000);
+
+  HTTPClient https;
+  if (!https.begin(client, VERCEL_URL)) {
+    Serial.println(">>> [VERCEL] Gagal menginisialisasi koneksi HTTPS");
+    return;
+  }
+
+  https.addHeader("Content-Type", "application/json");
+
+  // Format payload JSON sesuai struktur yang diharapkan Vercel & Dashboard
+  char payload[512];
   snprintf(payload, sizeof(payload),
-    "{\"mq6\":%.2f,\"mq135\":%.2f,\"mq3\":%.2f,\"mq7\":%.2f,"
+    "{\"action\":\"live_telemetry\","
+    "\"sensors\":{\"mq6\":%.2f,\"mq135\":%.2f,\"mq3\":%.2f,\"mq7\":%.2f,"
     "\"tgs2611\":%.2f,\"tgs2602\":%.2f,\"tgs2600\":%.2f,\"tgs2620\":%.2f,"
-    "\"dht1_temp\":%.2f,\"dht1_hum\":%.2f,\"dht2_temp\":%.2f,\"dht2_hum\":%.2f,"
-    "\"inlet_pump\":%d,\"outlet_pump\":%d,\"elapsed_time\":%lu,\"phase\":%d}",
+    "\"dht1_temp\":%.2f,\"dht1_hum\":%.2f,\"dht2_temp\":%.2f,\"dht2_hum\":%.2f},"
+    "\"status\":{\"inlet_pump\":%s,\"outlet_pump\":%s,\"elapsed_time\":%lu,\"phase\":%d},"
+    "\"fw_version\":\"1.2.0\"}",
     sensors.mq6, sensors.mq135, sensors.mq3, sensors.mq7,
     sensors.tgs2611, sensors.tgs2602, sensors.tgs2600, sensors.tgs2620,
     sensors.dht1_temp, sensors.dht1_hum, sensors.dht2_temp, sensors.dht2_hum,
-    driver1_active ? 1 : 0, driver2_active ? 1 : 0, getElapsedTime(), getPhase()
+    driver1_active ? "true" : "false",
+    driver2_active ? "true" : "false",
+    getElapsedTime(), getPhase()
   );
 
-  mqttClient.publish("v1/devices/me/telemetry", payload);
-}
+  int httpCode = https.POST((uint8_t*)payload, strlen(payload));
 
-// ─── 9. MQTT CALLBACK & RPC HANDLER ──────────────────────────────────────────
-void onMqttMessage(char* topic, byte* payload, unsigned int length) {
-  String topicStr = String(topic);
-  String message = "";
-  for (unsigned int i = 0; i < length; i++) message += (char)payload[i];
-  message.toUpperCase();
+  if (httpCode > 0) {
+    String response = https.getString();
 
-  if (topicStr.startsWith("v1/devices/me/rpc/request/")) {
-    String requestId = topicStr.substring(String("v1/devices/me/rpc/request/").length());
-    String responseTopic = "v1/devices/me/rpc/response/" + requestId;
-
-    if (message.indexOf("START") >= 0 || message.indexOf("TRUE") >= 0) {
+    // Periksa apakah Web Dashboard Vercel mengirim perintah kendali (START / STOP)
+    if (response.indexOf("\"command\":\"START\"") >= 0) {
       if (!system_running) {
+        Serial.println(">>> [CLOUD CMD] ⚡ Perintah START diterima dari Web Vercel!");
         system_running = true;
         cycle_start_ms = millis();
         stopDriverA();
@@ -226,34 +238,27 @@ void onMqttMessage(char* topic, byte* payload, unsigned int length) {
         readSensors();
         sendSerialJson();
       }
-      mqttClient.publish(responseTopic.c_str(), "{\"status\":\"started\",\"running\":true}");
-    } else if (message.indexOf("STOP") >= 0 || message.indexOf("FALSE") >= 0) {
+    } else if (response.indexOf("\"command\":\"STOP\"") >= 0) {
       if (system_running) {
+        Serial.println(">>> [CLOUD CMD] 🛑 Perintah STOP diterima dari Web Vercel!");
         system_running = false;
         stopDriverA();
         stopDriverB();
         sendSerialJson();
       }
-      mqttClient.publish(responseTopic.c_str(), "{\"status\":\"stopped\",\"running\":false}");
     }
+  } else {
+    Serial.printf(">>> [VERCEL] HTTPS POST Error: %s\n", https.errorToString(httpCode).c_str());
   }
+
+  https.end();
 }
 
-void reconnectMqtt() {
-  if (WiFi.status() != WL_CONNECTED) return;
-  if (!mqttClient.connected()) {
-    if (mqttClient.connect("ENose_ESP32S3", TB_TOKEN, NULL)) {
-      Serial.println(">>> [MQTT] Connected to ThingsBoard!");
-      mqttClient.subscribe("v1/devices/me/rpc/request/+");
-    }
-  }
-}
-
-// ─── 10. SETUP ───────────────────────────────────────────────────────────────
+// ─── 10. SETUP SISTEM ────────────────────────────────────────────────────────
 void setup() {
   Serial.begin(115200);
 
-  // Inisialisasi Pin Driver Motor
+  // Inisialisasi Pin Driver Motor (L298N)
   pinMode(PIN_IN1_A, OUTPUT); pinMode(PIN_IN2_A, OUTPUT);
   pinMode(PIN_IN3_A, OUTPUT); pinMode(PIN_IN4_A, OUTPUT);
   pinMode(PIN_ENA_A, OUTPUT); pinMode(PIN_ENB_A, OUTPUT);
@@ -265,7 +270,7 @@ void setup() {
   stopDriverA();
   stopDriverB();
 
-  // Inisialisasi I2C & ADC
+  // Inisialisasi I2C & Modul ADC ADS1115
   Wire.begin(PIN_SDA, PIN_SCL, 400000);
   ads1.begin(0x48);
   ads2.begin(0x49);
@@ -275,28 +280,31 @@ void setup() {
   dht1.begin();
   dht2.begin();
 
-  // Power-On Self-Test (POST) 3 Detik
+  // Power-On Self-Test (POST) 3 Detik: Tes Pompa Aktif Sesaat
   Serial.println(">>> Running Power-On Self-Test (All Pumps ON for 3s)...");
   startDriverA();
   startDriverB();
   delay(3000);
   stopDriverA();
   stopDriverB();
-  Serial.println(">>> Self-Test Complete. Pumps OFF. System Ready!");
+  Serial.println(">>> Self-Test Selesai. Pompa Standby. Sistem Siap!");
 
-  // Koneksi Wi-Fi (opsional, tidak memblokir jika gagal)
+  // Koneksi ke Wi-Fi Internet
   if (strlen(WIFI_SSID) > 0 && strcmp(WIFI_SSID, "YOUR_WIFI_SSID") != 0) {
+    Serial.printf(">>> [Wi-Fi] Menghubungkan ke hotspot/Wi-Fi: %s ...\n", WIFI_SSID);
+    WiFi.mode(WIFI_STA);
     WiFi.begin(WIFI_SSID, WIFI_PASS);
     unsigned long startAttempt = millis();
-    while (WiFi.status() != WL_CONNECTED && millis() - startAttempt < 8000) {
+    while (WiFi.status() != WL_CONNECTED && millis() - startAttempt < 10000) {
       delay(500);
+      Serial.print(".");
     }
+    Serial.println();
     if (WiFi.status() == WL_CONNECTED) {
-      Serial.println(">>> [Wi-Fi] Connected!");
-      mqttClient.setServer(TB_HOST, TB_PORT);
-      mqttClient.setCallback(onMqttMessage);
+      Serial.printf(">>> [Wi-Fi] ✅ Berhasil Terhubung! IP Lokal: %s\n", WiFi.localIP().toString().c_str());
+      Serial.printf(">>> [VERCEL CLOUD] Target Sinkronisasi: %s\n", VERCEL_URL);
     } else {
-      Serial.println("⚠️ [Wi-Fi] Timeout. Berjalan dalam mode Offline Serial.");
+      Serial.println("⚠️ [Wi-Fi] Gagal konek (Timeout). Berjalan dalam mode Offline Serial.");
     }
   }
 }
@@ -305,13 +313,17 @@ void setup() {
 void loop() {
   unsigned long now = millis();
 
-  // Handle Wi-Fi & MQTT
-  if (WiFi.status() == WL_CONNECTED) {
-    if (!mqttClient.connected()) reconnectMqtt();
-    mqttClient.loop();
+  // Auto-reconnect Wi-Fi jika terputus dari jaringan
+  if (WiFi.status() != WL_CONNECTED && strlen(WIFI_SSID) > 0 && strcmp(WIFI_SSID, "YOUR_WIFI_SSID") != 0) {
+    static unsigned long last_reconnect = 0;
+    if (now - last_reconnect > 8000) {
+      Serial.println(">>> [Wi-Fi] Mencoba menyambung kembali ke Wi-Fi...");
+      WiFi.reconnect();
+      last_reconnect = now;
+    }
   }
 
-  // Handle Serial Input dari GUI (START / STOP)
+  // Handle Kontrol Serial Manual jika terhubung kabel USB ke Laptop (START / STOP)
   if (Serial.available()) {
     String cmd = Serial.readStringUntil('\n');
     cmd.trim();
@@ -332,15 +344,15 @@ void loop() {
     }
   }
 
-  // Akuisisi Sensor & Pengiriman Data setiap 1 Detik (1000ms)
+  // Akuisisi Sensor & Transmisi Data setiap 1 Detik (1000ms)
   if (now - last_read_ms >= 1000) {
     readSensors();
-    sendSerialJson();
-    sendThingsBoardTelemetry();
+    sendSerialJson();        // Kirim via Serial COM USB (Desktop GUI)
+    sendVercelTelemetry();   // Kirim langsung ke Vercel Cloud via HTTPS
     last_read_ms = now;
   }
 
-  // State Machine Siklus 360 Detik
+  // State Machine Siklus 360 Detik (Sampling Otomatis)
   if (system_running) {
     unsigned long elapsed = getElapsedTime();
 

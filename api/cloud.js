@@ -1,9 +1,9 @@
 /**
  * Vercel Serverless Cloud Bridge for Electronic Nose Robusta Dashboard
  * Menghubungkan Dashboard di Vercel langsung ke:
- * 1. ESP32-S3 Lintas Hotspot (via ThingsBoard Cloud Relay - Token: cbq9l18oexktzzucit15)
+ * 1. ESP32-S3 via HTTPS Direct REST Relay (Port /api/cloud)
  * 2. Azure Cosmos DB (enose_db / telemetry) via REST API (HMAC-SHA256 Master Key)
- * 3. Azure IoT Hub REST API
+ * 3. ThingsBoard Cloud Relay (Token: cbq9l18oexktzzucit15)
  */
 
 const http = require('http');
@@ -18,6 +18,12 @@ const COSMOS_HOST = process.env.AZURE_COSMOS_HOST || 'enose.documents.azure.com'
 const COSMOS_KEY = process.env.AZURE_COSMOS_KEY || '';
 const COSMOS_DB = process.env.AZURE_COSMOS_DATABASE || 'enose_db';
 const COSMOS_COLL = process.env.AZURE_COSMOS_CONTAINER || 'telemetry';
+
+// Global In-Memory Cache (berjalan antar request saat serverless instance warm)
+let memLiveTelemetry = null;
+let memLastTelemetryMs = 0;
+let memActiveCmd = 'IDLE';
+let memActiveCmdSeq = 0;
 
 function httpRequest(options, bodyStr = null) {
   return new Promise((resolve, reject) => {
@@ -111,28 +117,21 @@ module.exports = async (req, res) => {
         });
       }
 
-      // 1. Ambil telemetri live langsung dari ThingsBoard Cloud (Jalur Utama Lintas Hotspot & Vercel)
-      const tbRes = await httpRequest({
-        protocol: 'https:',
-        hostname: TB_HOST,
-        port: 443,
-        path: `/api/v1/${TB_TOKEN}/attributes?clientKeys=live_telemetry,status,fw_version`,
-        method: 'GET'
-      }).catch(() => null);
-
-      let clientAttrs = tbRes?.json?.client || {};
-      let liveTelemetry = clientAttrs.live_telemetry || null;
-      let fwVer = clientAttrs.fw_version || '1.2.0';
+      let liveTelemetry = null;
+      let fwVer = '1.2.0';
       let isEspActive = false;
+      let activeMode = 'standby';
 
-      if (liveTelemetry && liveTelemetry.sensors) {
+      // 1. Cek telemetri live dari In-Memory Serverless Cache (paling cepat, update <= 12 detik)
+      const nowMs = Date.now();
+      if (memLiveTelemetry && (nowMs - memLastTelemetryMs <= 12000)) {
         isEspActive = true;
-        if (liveTelemetry.firmware_version) {
-          fwVer = liveTelemetry.firmware_version;
-        }
+        liveTelemetry = memLiveTelemetry;
+        fwVer = memLiveTelemetry.firmware_version || fwVer;
+        activeMode = 'direct_vercel_relay';
       }
 
-      // 2. Fallback jika ThingsBoard tidak ada tapi Azure Cosmos DB tersedia
+      // 2. Fallback ke Azure Cosmos DB (dokumen LIVE-ESP32-RELAY)
       if (!isEspActive && COSMOS_KEY) {
         const dateUtc = new Date().toUTCString();
         const resourceId = `dbs/${COSMOS_DB}/colls/${COSMOS_COLL}/docs/LIVE-ESP32-RELAY`;
@@ -159,6 +158,26 @@ module.exports = async (req, res) => {
           isEspActive = true;
           liveTelemetry = relayDoc.live_telemetry || liveTelemetry;
           fwVer = relayDoc.fw_version || fwVer;
+          activeMode = 'azure_cosmos_relay';
+        }
+      }
+
+      // 3. Fallback ke ThingsBoard Cloud
+      if (!isEspActive) {
+        const tbRes = await httpRequest({
+          protocol: 'https:',
+          hostname: TB_HOST,
+          port: 443,
+          path: `/api/v1/${TB_TOKEN}/attributes?clientKeys=live_telemetry,status,fw_version`,
+          method: 'GET'
+        }).catch(() => null);
+
+        let clientAttrs = tbRes?.json?.client || {};
+        if (clientAttrs.live_telemetry && clientAttrs.live_telemetry.sensors) {
+          isEspActive = true;
+          liveTelemetry = clientAttrs.live_telemetry;
+          fwVer = clientAttrs.fw_version || fwVer;
+          activeMode = 'thingsboard_cloud_relay';
         }
       }
 
@@ -166,7 +185,7 @@ module.exports = async (req, res) => {
         success: true,
         connected: true,
         esp_connected: isEspActive,
-        mode: isEspActive ? 'thingsboard_cloud_relay' : 'standby',
+        mode: activeMode,
         live_telemetry: liveTelemetry,
         fw_version: fwVer,
         status: isEspActive ? 'ONLINE' : 'OFFLINE',
@@ -176,9 +195,44 @@ module.exports = async (req, res) => {
 
     if (req.method === 'POST') {
       const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
-      const action = body.action || 'save_sample';
+      const action = body.action || (body.sensors ? 'live_telemetry' : 'save_sample');
 
-      // 0. Gerbang Utama OTA Trigger ke ThingsBoard Cloud
+      // 0. Penerimaan Live Telemetry Langsung dari ESP32 (Jalur Utama Vercel HTTPS)
+      if (action === 'live_telemetry' || action === 'telemetry') {
+        const sensors = body.sensors || {};
+        const st = body.status || {};
+        const fwVer = body.fw_version || st.firmware_version || '1.2.0';
+
+        memLiveTelemetry = {
+          sensors: sensors,
+          status: st,
+          firmware_version: fwVer,
+          timestamp: new Date().toISOString()
+        };
+        memLastTelemetryMs = Date.now();
+
+        // Simpan snapshot status LIVE-ESP32-RELAY ke Azure Cosmos DB
+        if (COSMOS_KEY) {
+          upsertCosmosDoc({
+            id: 'LIVE-ESP32-RELAY',
+            coffee_id: 'RELAY',
+            live_telemetry: memLiveTelemetry,
+            fw_version: fwVer,
+            status: 'ONLINE',
+            updated_at: new Date().toISOString()
+          }).catch(() => null);
+        }
+
+        // Kembalikan perintah terbaru ke ESP32 (jika user menekan tombol START/STOP di Web)
+        return res.status(200).json({
+          success: true,
+          command: memActiveCmd,
+          cmd_seq: memActiveCmdSeq,
+          received_at: new Date().toISOString()
+        });
+      }
+
+      // 1. Gerbang Utama OTA Trigger ke ThingsBoard Cloud
       if (action === 'ota_trigger') {
         const cmdSeq = Math.floor(Date.now() / 1000) % 2000000000;
         const tbPayload = JSON.stringify({
@@ -206,7 +260,7 @@ module.exports = async (req, res) => {
         });
       }
 
-      // 0b. Reset OTA status ke IDLE di ThingsBoard Cloud
+      // 1b. Reset OTA status ke IDLE di ThingsBoard Cloud
       if (action === 'ota_reset') {
         const tbPayload = JSON.stringify({
           cloud_cmd: 'IDLE',
@@ -230,27 +284,13 @@ module.exports = async (req, res) => {
         });
       }
 
-      // 1. Kirim Command (START, STOP, PURGE) ke ESP32 via ThingsBoard Cloud
+      // 2. Kirim Command (START, STOP, PURGE) ke ESP32 via Azure & Memory Relay
       if (action === 'command') {
         const cmd = (body.command || 'START').toUpperCase();
         const seq = Math.floor(Date.now() / 1000) % 2000000000;
 
-        const tbPayload = JSON.stringify({
-          cloud_cmd: cmd,
-          cmd_seq: seq
-        });
-
-        await httpRequest({
-          protocol: 'https:',
-          hostname: TB_HOST,
-          port: 443,
-          path: `/api/v1/${TB_TOKEN}/attributes`,
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Content-Length': Buffer.byteLength(tbPayload)
-          }
-        }, tbPayload).catch(() => null);
+        memActiveCmd = cmd;
+        memActiveCmdSeq = seq;
 
         if (COSMOS_KEY) {
           await upsertCosmosDoc({
@@ -262,14 +302,32 @@ module.exports = async (req, res) => {
           }).catch(() => null);
         }
 
+        // Juga siarkan ke ThingsBoard Cloud
+        const tbPayload = JSON.stringify({
+          cloud_cmd: cmd,
+          cmd_seq: seq
+        });
+        httpRequest({
+          protocol: 'https:',
+          hostname: TB_HOST,
+          port: 443,
+          path: `/api/v1/${TB_TOKEN}/attributes`,
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(tbPayload)
+          }
+        }, tbPayload).catch(() => null);
+
         return res.status(200).json({
           success: true,
+          command: cmd,
           cmd_seq: seq,
-          message: `Perintah '${cmd}' dikirim ke ThingsBoard Cloud & ESP32!`
+          message: `Perintah '${cmd}' dikirim ke ESP32 & Azure Cloud!`
         });
       }
 
-      // 2. Batch Sync ke Azure Cosmos DB
+      // 3. Batch Sync ke Azure Cosmos DB
       if (action === 'batch_sync' && Array.isArray(body.samples)) {
         const synced = [];
         for (const s of body.samples) {
@@ -285,7 +343,7 @@ module.exports = async (req, res) => {
         });
       }
 
-      // 3. Simpan 1 Sampel ke Azure Cosmos DB
+      // 4. Simpan 1 Sampel ke Azure Cosmos DB
       const doc = body.sample || body;
       if (!doc.id) doc.id = `SMPL-${Date.now().toString(36).toUpperCase()}`;
       if (!doc.coffee_id) doc.coffee_id = 'C05';
@@ -306,4 +364,3 @@ module.exports = async (req, res) => {
     return res.status(500).json({ success: false, error: err.message });
   }
 };
-
